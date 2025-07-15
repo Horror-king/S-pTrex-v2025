@@ -1077,14 +1077,18 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
-// NEW: Login stability variables
+// Enhanced login stability variables
 let loginAttempts = 0;
 let isLoggingIn = false;
 let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
+let isReconnecting = false;
+let connectionRetries = 0;
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 30000; // 30 seconds
 
-// NEW: Function to check if account is blocked
+// Enhanced function to check if account is blocked
 async function checkBlockStatus(api) {
     try {
         // Check if we've recently checked block status
@@ -1117,7 +1121,7 @@ async function checkBlockStatus(api) {
     }
 }
 
-// NEW: Enhanced login function with retry logic and block detection
+// Enhanced login function with retry logic and block detection
 async function performLogin(loginData, fcaLoginOptions) {
     return new Promise((resolve, reject) => {
         if (isLoggingIn) {
@@ -1169,6 +1173,73 @@ async function performLogin(loginData, fcaLoginOptions) {
             }
         });
     });
+}
+
+// New: Enhanced auto-reconnect function
+async function handleReconnect(api, loginData, fcaLoginOptions) {
+    if (isReconnecting || connectionRetries >= MAX_RETRIES) return;
+    
+    isReconnecting = true;
+    connectionRetries++;
+    
+    logger.warn(`Attempting to reconnect (attempt ${connectionRetries}/${MAX_RETRIES})...`, "RECONNECT");
+    
+    try {
+        // Close existing connection if it exists
+        if (api && api.logout) {
+            try {
+                await api.logout();
+            } catch (e) {
+                logger.err("Error during logout before reconnect: " + e.message, "RECONNECT_ERROR");
+            }
+        }
+        
+        // Wait before reconnecting
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        
+        // Perform fresh login
+        const newApi = await performLogin(loginData, fcaLoginOptions);
+        
+        // Update global references
+        global.client.api = newApi;
+        if (global.client.listenMqtt) {
+            global.client.listenMqtt.stopListening();
+        }
+        global.client.listenMqtt = newApi.listenMqtt(listen({ api: newApi }));
+        
+        // Save new appstate
+        const newAppState = newApi.getAppState();
+        let d = JSON.stringify(newAppState, null, "\x09");
+        if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
+            d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
+        }
+        fs.writeFileSync(fbstateFile, d);
+        
+        logger.log("Reconnect successful!", "RECONNECT_SUCCESS");
+        connectionRetries = 0;
+        isReconnecting = false;
+        return newApi;
+    } catch (err) {
+        logger.err(`Reconnect attempt ${connectionRetries} failed: ${err.message}`, "RECONNECT_FAILED");
+        isReconnecting = false;
+        
+        if (connectionRetries >= MAX_RETRIES) {
+            logger.err("Max reconnect attempts reached. Please check your network and account status.", "RECONNECT_LIMIT");
+            if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
+                try {
+                    // Try to notify admin about connection issues
+                    const adminID = global.config.ADMINBOT[0];
+                    await api.sendMessage(
+                        `⚠️ Bot failed to reconnect after ${MAX_RETRIES} attempts. Last error: ${err.message}`,
+                        adminID
+                    );
+                } catch (e) {
+                    logger.err("Failed to send reconnect failure notification: " + e.message, "NOTIFY_ERROR");
+                }
+            }
+        }
+        throw err;
+    }
 }
 
 const delayedLog = async (message) => {
@@ -1260,7 +1331,7 @@ global.client = {
     timeStart: Date.now(),
     lastActivityTime: Date.now(),
     nonPrefixCommands: new Set(),
-    isBlocked: () => isBlocked, // Expose block status
+    isBlocked: () => isBlocked,
     loadCommand: async function(commandFileName) {
         const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
         const fullPath = path.resolve(commandsPath, commandFileName);
@@ -1572,7 +1643,7 @@ async function onBot() {
         delay: global.config.FCAOption.delay || 500
     };
 
-    // NEW: Login with retry logic and block detection
+    // Enhanced login with retry logic and block detection
     let api;
     while (loginAttempts < 3) {
         try {
@@ -1648,6 +1719,29 @@ async function onBot() {
             logger.err(`Error checking block status: ${e.message}`, "BLOCK_CHECK_ERROR");
         }
     }, 3600000); // Check every hour
+
+    // New: Connection monitoring
+    setInterval(async () => {
+        try {
+            // Simple API call to check connection
+            await api.getThreadList(1, null, ['INBOX']);
+            
+            // If we get here, connection is good
+            connectionRetries = 0; // Reset retry counter
+            global.client.lastActivityTime = Date.now();
+        } catch (e) {
+            logger.warn(`Connection check failed: ${e.message}`, "CONNECTION_CHECK");
+            
+            // If we have multiple failures, attempt reconnect
+            if (connectionRetries < MAX_RETRIES) {
+                try {
+                    await handleReconnect(api, loginData, fcaLoginOptions);
+                } catch (reconnectErr) {
+                    logger.err(`Reconnect attempt failed: ${reconnectErr.message}`, "RECONNECT_FAIL");
+                }
+            }
+        }
+    }, 60000); // Check every minute
 
     // Restore commands before loading new ones
     await global.client.restoreCommands();
@@ -1759,10 +1853,37 @@ async function onBot() {
         process.exit(1);
     }
 
-    global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
-    customScript({ api: global.client.api });
-
-    logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
+    // New: Enhanced error handling for listener
+    try {
+        global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
+        
+        // Add error handler for the listener
+        global.client.listenMqtt.on('error', async (err) => {
+            logger.err(`Listener error: ${err.message}`, "LISTENER_ERROR");
+            
+            if (!isReconnecting) {
+                try {
+                    await handleReconnect(api, loginData, fcaLoginOptions);
+                } catch (reconnectErr) {
+                    logger.err(`Failed to reconnect after listener error: ${reconnectErr.message}`, "RECONNECT_FAIL");
+                }
+            }
+        });
+        
+        customScript({ api: global.client.api });
+        
+        logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
+    } catch (err) {
+        logger.err(`Failed to start listener: ${err.message}`, "LISTENER_START_FAIL");
+        
+        // Attempt reconnect if listener fails to start
+        try {
+            await handleReconnect(api, loginData, fcaLoginOptions);
+        } catch (reconnectErr) {
+            logger.err(`Failed to reconnect after listener start failure: ${reconnectErr.message}`, "RECONNECT_FAIL");
+            process.exit(1);
+        }
+    }
 
     if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
         const adminID = global.config.ADMINBOT[0];
