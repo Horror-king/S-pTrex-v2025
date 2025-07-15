@@ -1077,16 +1077,15 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
-// Enhanced login stability variables
+// Enhanced Login stability variables
 let loginAttempts = 0;
+const MAX_LOGIN_ATTEMPTS = 3;
 let isLoggingIn = false;
 let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
-let isReconnecting = false;
-let connectionRetries = 0;
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 30000; // 30 seconds
+let lastReconnectAttempt = 0;
+const RECONNECT_DELAY = 30000; // 30 seconds between reconnect attempts
 
 // Enhanced function to check if account is blocked
 async function checkBlockStatus(api) {
@@ -1098,8 +1097,8 @@ async function checkBlockStatus(api) {
         
         lastBlockCheck = Date.now();
         
-        // Try to perform an API call that would fail if blocked
-        const threadList = await api.getThreadList(1, null, ['INBOX']);
+        // Try to perform a lightweight API call that would fail if blocked
+        const userInfo = await api.getUserInfo(api.getCurrentUserID());
         
         // If we got this far, we're not blocked
         if (isBlocked) {
@@ -1109,7 +1108,7 @@ async function checkBlockStatus(api) {
         return false;
     } catch (e) {
         if (e.message.includes('blocked') || e.message.includes('restricted') || 
-            e.message.includes('temporarily unavailable')) {
+            e.message.includes('temporarily unavailable') || e.message.includes('login approval')) {
             if (!isBlocked) {
                 logger.err("Account appears to be blocked by Facebook", "BLOCK_STATUS");
             }
@@ -1121,7 +1120,7 @@ async function checkBlockStatus(api) {
     }
 }
 
-// Enhanced login function with retry logic and block detection
+// Enhanced login function with retry logic, block detection, and rate limiting
 async function performLogin(loginData, fcaLoginOptions) {
     return new Promise((resolve, reject) => {
         if (isLoggingIn) {
@@ -1132,7 +1131,7 @@ async function performLogin(loginData, fcaLoginOptions) {
         loginAttempts++;
         lastLoginAttempt = Date.now();
 
-        logger.log(`Attempting login (attempt ${loginAttempts}/3)`, "LOGIN_ATTEMPT");
+        logger.log(`Attempting login (attempt ${loginAttempts}/${MAX_LOGIN_ATTEMPTS})`, "LOGIN_ATTEMPT");
 
         // Add block status check before attempting login
         if (isBlocked && Date.now() - lastBlockCheck < 3600000) { // 1 hour
@@ -1140,105 +1139,111 @@ async function performLogin(loginData, fcaLoginOptions) {
             return reject(new Error("Account is blocked. Please check Facebook and verify your account."));
         }
 
-        login(loginData, fcaLoginOptions, (err, api) => {
-            isLoggingIn = false;
-            
-            if (err) {
-                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
-                
-                // Detect block status from login error
-                if (err.error === 'The account is temporarily unavailable.' || 
-                    err.error.includes('blocked') || 
-                    err.error.includes('restricted')) {
-                    isBlocked = true;
-                    lastBlockCheck = Date.now();
-                    reject(new Error("Account is blocked. Please check Facebook and verify your account."));
-                } 
-                else if (err.error === 'login-approval' || err.error === 'Login approval needed') {
-                    reject(new Error("Login approval needed. Please approve the login from your Facebook account in a web browser."));
-                } 
-                else if (err.error === 'Incorrect username/password.') {
-                    reject(new Error("Incorrect email or password. Please check your credentials."));
-                }
-                else if (err.error.includes('error retrieving userID') || err.error.includes('from an unknown location')) {
-                    reject(new Error("Facebook login blocked from unknown location. Log into Facebook in a browser first."));
-                }
-                else {
-                    reject(err);
-                }
-            } else {
-                loginAttempts = 0; // Reset on success
-                isBlocked = false; // Reset block status on successful login
-                resolve(api);
-            }
-        });
+        // Add delay between login attempts
+        const timeSinceLastAttempt = Date.now() - lastLoginAttempt;
+        if (timeSinceLastAttempt < RECONNECT_DELAY && loginAttempts > 1) {
+            const remainingDelay = RECONNECT_DELAY - timeSinceLastAttempt;
+            logger.log(`Waiting ${remainingDelay}ms before next login attempt...`, "LOGIN_DELAY");
+            setTimeout(() => {
+                login(loginData, fcaLoginOptions, (err, api) => handleLoginResponse(err, api, resolve, reject));
+            }, remainingDelay);
+            return;
+        }
+
+        login(loginData, fcaLoginOptions, (err, api) => handleLoginResponse(err, api, resolve, reject));
     });
 }
 
-// New: Enhanced auto-reconnect function
+function handleLoginResponse(err, api, resolve, reject) {
+    isLoggingIn = false;
+    
+    if (err) {
+        logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
+        
+        // Enhanced block detection from login error
+        if (err.error === 'The account is temporarily unavailable.' || 
+            err.error?.includes('blocked') || 
+            err.error?.includes('restricted') ||
+            err.message?.includes('blocked') ||
+            err.message?.includes('restricted')) {
+            isBlocked = true;
+            lastBlockCheck = Date.now();
+            reject(new Error("Account is blocked. Please check Facebook and verify your account."));
+        } 
+        else if (err.error === 'login-approval' || err.error === 'Login approval needed') {
+            reject(new Error("Login approval needed. Please approve the login from your Facebook account in a web browser."));
+        } 
+        else if (err.error === 'Incorrect username/password.') {
+            reject(new Error("Incorrect email or password. Please check your credentials."));
+        }
+        else if (err.error?.includes('error retrieving userID') || 
+                 err.error?.includes('from an unknown location') ||
+                 err.message?.includes('userID') ||
+                 err.message?.includes('unknown location')) {
+            reject(new Error("Facebook login blocked from unknown location. Log into Facebook in a browser first."));
+        }
+        else {
+            reject(err);
+        }
+    } else {
+        loginAttempts = 0; // Reset on success
+        isBlocked = false; // Reset block status on successful login
+        resolve(api);
+    }
+}
+
+// Enhanced reconnection handler
 async function handleReconnect(api, loginData, fcaLoginOptions) {
-    if (isReconnecting || connectionRetries >= MAX_RETRIES) return;
-    
-    isReconnecting = true;
-    connectionRetries++;
-    
-    logger.warn(`Attempting to reconnect (attempt ${connectionRetries}/${MAX_RETRIES})...`, "RECONNECT");
-    
     try {
-        // Close existing connection if it exists
-        if (api && api.logout) {
-            try {
-                await api.logout();
-            } catch (e) {
-                logger.err("Error during logout before reconnect: " + e.message, "RECONNECT_ERROR");
-            }
+        // Check if we should attempt reconnect
+        if (Date.now() - lastReconnectAttempt < RECONNECT_DELAY) {
+            logger.log("Skipping reconnect attempt - too soon after last attempt", "RECONNECT");
+            return;
         }
         
-        // Wait before reconnecting
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        lastReconnectAttempt = Date.now();
+        
+        logger.log("Attempting to reconnect...", "RECONNECT");
+        
+        // First try to gracefully logout if possible
+        try {
+            await api.logout();
+            logger.log("Successfully logged out before reconnect", "RECONNECT");
+        } catch (logoutErr) {
+            logger.err(`Error during logout before reconnect: ${logoutErr.message}`, "RECONNECT_ERROR");
+        }
         
         // Perform fresh login
         const newApi = await performLogin(loginData, fcaLoginOptions);
         
-        // Update global references
+        // Update global API reference
         global.client.api = newApi;
-        if (global.client.listenMqtt) {
-            global.client.listenMqtt.stopListening();
-        }
-        global.client.listenMqtt = newApi.listenMqtt(listen({ api: newApi }));
         
-        // Save new appstate
-        const newAppState = newApi.getAppState();
-        let d = JSON.stringify(newAppState, null, "\x09");
-        if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
-            d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
-        }
-        fs.writeFileSync(fbstateFile, d);
-        
-        logger.log("Reconnect successful!", "RECONNECT_SUCCESS");
-        connectionRetries = 0;
-        isReconnecting = false;
-        return newApi;
-    } catch (err) {
-        logger.err(`Reconnect attempt ${connectionRetries} failed: ${err.message}`, "RECONNECT_FAILED");
-        isReconnecting = false;
-        
-        if (connectionRetries >= MAX_RETRIES) {
-            logger.err("Max reconnect attempts reached. Please check your network and account status.", "RECONNECT_LIMIT");
-            if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
-                try {
-                    // Try to notify admin about connection issues
-                    const adminID = global.config.ADMINBOT[0];
-                    await api.sendMessage(
-                        `⚠️ Bot failed to reconnect after ${MAX_RETRIES} attempts. Last error: ${err.message}`,
-                        adminID
-                    );
-                } catch (e) {
-                    logger.err("Failed to send reconnect failure notification: " + e.message, "NOTIFY_ERROR");
-                }
+        // Update appstate
+        try {
+            const newAppState = newApi.getAppState();
+            const appStateFile = resolve(join(global.client.mainPath, fbstateFile));
+            let appStateData = JSON.stringify(newAppState, null, "\x09");
+            
+            if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
+                appStateData = await global.utils.encryptState(appStateData, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
             }
+            
+            writeFileSync(appStateFile, appStateData);
+            logger.log("Appstate updated after reconnect", "RECONNECT");
+            
+            if (Array.isArray(newAppState)) {
+                global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
+            }
+        } catch (appStateErr) {
+            logger.err(`Error updating appstate after reconnect: ${appStateErr.message}`, "RECONNECT_ERROR");
         }
-        throw err;
+        
+        logger.log("Successfully reconnected", "RECONNECT");
+        return newApi;
+    } catch (reconnectErr) {
+        logger.err(`Reconnect attempt failed: ${reconnectErr.message}`, "RECONNECT_ERROR");
+        throw reconnectErr;
     }
 }
 
@@ -1383,11 +1388,6 @@ global.client = {
                 global.client.commands.delete(config.name);
             }
 
-            if (config.usePrefix === false || config.usePrefix === "both") {
-                global.client.nonPrefixCommands.add(config.name.toLowerCase());
-            }
-
-            // Add to installed commands if not already present
             const commandName = path.basename(commandFileName, '.js');
             if (!global.installedCommands.includes(commandName)) {
                 global.installedCommands.push(commandName);
@@ -1435,12 +1435,10 @@ global.client = {
         const commandsPath = path.join(this.mainPath, 'modules', 'commands');
 
         try {
-            // Get all available command files
             const commandFiles = fs.readdirSync(commandsPath)
                 .filter(file => file.endsWith('.js'))
                 .map(file => file);
 
-            // Restore each command from persistent storage
             for (const cmd of global.installedCommands) {
                 const cmdFile = `${cmd}.js`;
                 if (commandFiles.includes(cmdFile)) {
@@ -1568,7 +1566,6 @@ async function onBot() {
         global.config = JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
         logger.loader("Loaded config.json.");
 
-        // Initialize admin mode from config or persistent data
         global.adminMode.enabled = global.config.adminOnly || global.adminMode.enabled;
         global.adminMode.adminUserIDs = global.config.ADMINBOT || global.adminMode.adminUserIDs;
 
@@ -1645,12 +1642,12 @@ async function onBot() {
 
     // Enhanced login with retry logic and block detection
     let api;
-    while (loginAttempts < 3) {
+    while (loginAttempts < MAX_LOGIN_ATTEMPTS) {
         try {
             // Respect retry delay
             const timeSinceLastAttempt = Date.now() - lastLoginAttempt;
-            if (timeSinceLastAttempt < 30000) { // 30 seconds delay between attempts
-                const waitTime = 30000 - timeSinceLastAttempt;
+            if (timeSinceLastAttempt < RECONNECT_DELAY && loginAttempts > 0) {
+                const waitTime = RECONNECT_DELAY - timeSinceLastAttempt;
                 logger.log(`Waiting ${waitTime}ms before next login attempt...`, "LOGIN_STABILITY");
                 await new Promise(resolve => setTimeout(resolve, waitTime));
             }
@@ -1665,8 +1662,8 @@ async function onBot() {
             
             break; // Success, exit retry loop
         } catch (err) {
-            if (loginAttempts >= 3) {
-                logger.err(`Max login attempts (3) reached.`, "LOGIN_FAILED");
+            if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+                logger.err(`Max login attempts (${MAX_LOGIN_ATTEMPTS}) reached.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
                     try {
                         logger.log(`Would notify admin about login failure`, "LOGIN_NOTIFY");
@@ -1690,7 +1687,7 @@ async function onBot() {
             writeFileSync(appStateFile, d);
             logger.log("Appstate updated and saved successfully.", "APPSTATE_SAVE");
         } else {
-            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library. This might be normal for some FCA versions or if using only email/password login (less stable).", "APPSTATE_WARN");
+            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library.", "APPSTATE_WARN");
             if (loginData.appState) {
                 global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
             }
@@ -1705,43 +1702,57 @@ async function onBot() {
          global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
     }
     else {
-        logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
+        logger.warn("Could not set global.account.cookie. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
         global.account.cookie = "";
     }
 
     global.client.api = api;
 
-    // Add periodic block status check
+    // Enhanced periodic block status check
     setInterval(async () => {
         try {
-            await checkBlockStatus(api);
+            const blocked = await checkBlockStatus(api);
+            if (blocked) {
+                logger.err("Account appears to be blocked. Attempting to reconnect...", "BLOCK_CHECK");
+                try {
+                    await handleReconnect(api, loginData, fcaLoginOptions);
+                } catch (reconnectErr) {
+                    logger.err("Failed to reconnect after block detection", "BLOCK_CHECK");
+                }
+            }
         } catch (e) {
             logger.err(`Error checking block status: ${e.message}`, "BLOCK_CHECK_ERROR");
         }
     }, 3600000); // Check every hour
 
-    // New: Connection monitoring
-    setInterval(async () => {
-        try {
-            // Simple API call to check connection
-            await api.getThreadList(1, null, ['INBOX']);
+    // Enhanced listener error handling
+    api.setOptions({
+        listenEvents: true,
+        selfListen: false,
+        logLevel: "silent"
+    });
+
+    api.listen((err, event) => {
+        if (err) {
+            logger.err(`Listener error: ${err.message}`, "LISTENER_ERROR");
             
-            // If we get here, connection is good
-            connectionRetries = 0; // Reset retry counter
-            global.client.lastActivityTime = Date.now();
-        } catch (e) {
-            logger.warn(`Connection check failed: ${e.message}`, "CONNECTION_CHECK");
-            
-            // If we have multiple failures, attempt reconnect
-            if (connectionRetries < MAX_RETRIES) {
-                try {
-                    await handleReconnect(api, loginData, fcaLoginOptions);
-                } catch (reconnectErr) {
-                    logger.err(`Reconnect attempt failed: ${reconnectErr.message}`, "RECONNECT_FAIL");
-                }
+            // Handle specific listener errors
+            if (err.message.includes('blocked') || err.message.includes('restricted')) {
+                isBlocked = true;
+                lastBlockCheck = Date.now();
+                logger.err("Account appears to be blocked based on listener error. Attempting to reconnect...", "LISTENER_BLOCK");
+                
+                // Attempt reconnect after delay
+                setTimeout(async () => {
+                    try {
+                        await handleReconnect(api, loginData, fcaLoginOptions);
+                    } catch (reconnectErr) {
+                        logger.err("Failed to reconnect after listener block", "LISTENER_RECONNECT");
+                    }
+                }, RECONNECT_DELAY);
             }
         }
-    }, 60000); // Check every minute
+    });
 
     // Restore commands before loading new ones
     await global.client.restoreCommands();
@@ -1752,7 +1763,6 @@ async function onBot() {
         global.adminMode.adminUserIDs.push(newAdminIDOnStartup);
         logger.log(`Added admin ${newAdminIDOnStartup} to in-memory config. For persistence, update config.json manually or remove this code block.`, "ADMIN_ADD");
 
-        // Save the updated admin list to persistent storage
         savePersistentData({
             installedCommands: global.installedCommands,
             adminMode: global.adminMode
@@ -1846,44 +1856,17 @@ async function onBot() {
         }
     }
 
-    // Add block status check before starting listener
+    // Final block status check before starting listener
     const blocked = await checkBlockStatus(api);
     if (blocked) {
         logger.err("Account is blocked. Cannot start listener.", "BLOCK_STATUS");
         process.exit(1);
     }
 
-    // New: Enhanced error handling for listener
-    try {
-        global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
-        
-        // Add error handler for the listener
-        global.client.listenMqtt.on('error', async (err) => {
-            logger.err(`Listener error: ${err.message}`, "LISTENER_ERROR");
-            
-            if (!isReconnecting) {
-                try {
-                    await handleReconnect(api, loginData, fcaLoginOptions);
-                } catch (reconnectErr) {
-                    logger.err(`Failed to reconnect after listener error: ${reconnectErr.message}`, "RECONNECT_FAIL");
-                }
-            }
-        });
-        
-        customScript({ api: global.client.api });
-        
-        logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
-    } catch (err) {
-        logger.err(`Failed to start listener: ${err.message}`, "LISTENER_START_FAIL");
-        
-        // Attempt reconnect if listener fails to start
-        try {
-            await handleReconnect(api, loginData, fcaLoginOptions);
-        } catch (reconnectErr) {
-            logger.err(`Failed to reconnect after listener start failure: ${reconnectErr.message}`, "RECONNECT_FAIL");
-            process.exit(1);
-        }
-    }
+    global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
+    customScript({ api: global.client.api });
+
+    logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
 
     if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
         const adminID = global.config.ADMINBOT[0];
@@ -1920,7 +1903,9 @@ function startWebServer() {
             timestamp: getCurrentTime(),
             bot_login_status: global.client.api ? 'Logged In' : 'Not Logged In / Initializing',
             uptime_seconds: Math.floor((Date.now() - global.client.timeStart) / 1000),
-            blocked: isBlocked
+            blocked: isBlocked,
+            login_attempts: loginAttempts,
+            last_login_attempt: lastLoginAttempt ? new Date(lastLoginAttempt).toISOString() : null
         });
     });
 
@@ -1938,12 +1923,10 @@ onBot();
 // --- Process Event Handlers for Stability ---
 process.on('uncaughtException', (err) => {
     logger.err(`Uncaught Exception: ${err.stack || err.message}`, "CRITICAL");
-    // Don't exit immediately - try to log the error and continue
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     logger.err(`Unhandled Rejection at: ${promise}, reason: ${reason}`, "CRITICAL");
-    // Don't exit immediately - try to log the error and continue
 });
 
 process.on('SIGTERM', () => {
@@ -1956,7 +1939,6 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-// Auto-restart if process dies
 process.on('exit', (code) => {
     if (code !== 0 && global.config?.autoRestart?.enabled) {
         logger.err(`Process exiting with code ${code} - attempting to restart`, "RESTART");
