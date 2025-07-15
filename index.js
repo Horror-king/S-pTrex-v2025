@@ -3,7 +3,7 @@ const path = require('path');
 const { exec, spawn } = require("child_process");
 
 const defaultConfigContent = {
-  "version": "1.0.1",
+  "version": "2.0.1",
   "language": "en",
   "email": "",
   "password": "",
