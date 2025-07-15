@@ -1725,34 +1725,39 @@ async function onBot() {
         }
     }, 3600000); // Check every hour
 
-    // Enhanced listener error handling
-    api.setOptions({
-        listenEvents: true,
-        selfListen: false,
-        logLevel: "silent"
-    });
-
-    api.listen((err, event) => {
-        if (err) {
-            logger.err(`Listener error: ${err.message}`, "LISTENER_ERROR");
-            
-            // Handle specific listener errors
-            if (err.message.includes('blocked') || err.message.includes('restricted')) {
-                isBlocked = true;
-                lastBlockCheck = Date.now();
-                logger.err("Account appears to be blocked based on listener error. Attempting to reconnect...", "LISTENER_BLOCK");
+    // Fixed listener implementation
+    try {
+        // Set up proper MQTT listener
+        global.client.listenMqtt = api.listenMqtt(async (err, event) => {
+            if (err) {
+                logger.err(`Listener error: ${err.message}`, "LISTENER_ERROR");
                 
-                // Attempt reconnect after delay
-                setTimeout(async () => {
-                    try {
-                        await handleReconnect(api, loginData, fcaLoginOptions);
-                    } catch (reconnectErr) {
-                        logger.err("Failed to reconnect after listener block", "LISTENER_RECONNECT");
-                    }
-                }, RECONNECT_DELAY);
+                // Handle specific listener errors
+                if (err.message.includes('blocked') || err.message.includes('restricted')) {
+                    isBlocked = true;
+                    lastBlockCheck = Date.now();
+                    logger.err("Account appears to be blocked based on listener error. Attempting to reconnect...", "LISTENER_BLOCK");
+                    
+                    // Attempt reconnect after delay
+                    setTimeout(async () => {
+                        try {
+                            await handleReconnect(api, loginData, fcaLoginOptions);
+                        } catch (reconnectErr) {
+                            logger.err("Failed to reconnect after listener block", "LISTENER_RECONNECT");
+                        }
+                    }, RECONNECT_DELAY);
+                }
+                return;
             }
-        }
-    });
+
+            // Process events normally here
+            // You can add your event handling logic here
+        });
+
+        logger.log("Successfully set up MQTT listener", "LISTENER_INIT");
+    } catch (listenerErr) {
+        logger.err(`Failed to set up listener: ${listenerErr.message}`, "LISTENER_ERROR");
+    }
 
     // Restore commands before loading new ones
     await global.client.restoreCommands();
@@ -1863,7 +1868,6 @@ async function onBot() {
         process.exit(1);
     }
 
-    global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
     customScript({ api: global.client.api });
 
     logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
