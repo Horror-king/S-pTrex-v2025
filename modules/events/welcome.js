@@ -1,10 +1,10 @@
 module.exports = {
   config: {
     name: "welcome",
-    version: "2.0",
+    version: "3.0",
     author: "Your Name",
     eventType: ["log:subscribe"],
-    description: "Automatically welcome new members",
+    description: "Guaranteed welcome message for new members",
     dependencies: {
       "delay": ""
     }
@@ -15,33 +15,54 @@ module.exports = {
     
     if (logMessageType === "log:subscribe") {
       try {
-        // Get bot ID and check if it was added
+        console.log('[WELCOME] New member event detected'); // Debug log
+        
+        // 1. Get bot ID
         const botID = api.getCurrentUserID();
-        const addedUsers = logMessageData.addedParticipants;
         
-        // Skip if bot was added
-        if (addedUsers.some(user => user.userFbId === botID)) {
-          return console.log("Bot was added to group, skipping welcome message");
+        // 2. Filter out bot addition
+        const newMembers = logMessageData.addedParticipants.filter(
+          user => user.userFbId !== botID
+        );
+        
+        if (newMembers.length === 0) {
+          return console.log('[WELCOME] No real users added, skipping');
         }
-
-        // Get group info
-        const threadInfo = await api.getThreadInfo(threadID);
-        const groupName = threadInfo.threadName || "the group";
         
-        // Create welcome message
-        const welcomeMessage = `👋 Hello ${addedUsers.map(user => user.fullName).join(', ')}!\n\n` +
+        // 3. Get group name with error fallback
+        let groupName = "the group";
+        try {
+          const threadInfo = await api.getThreadInfo(threadID);
+          groupName = threadInfo.threadName || groupName;
+        } catch (e) {
+          console.log('[WELCOME] Could not fetch group name, using default');
+        }
+        
+        // 4. Create personalized message
+        const nameList = newMembers.map(user => 
+          user.fullName || `user-${user.userFbId}`
+        ).join(', ');
+        
+        const welcomeMessage = `👋 Hello ${nameList}!\n\n` +
                               `Welcome to: ${groupName}\n` +
                               `Enjoy your stay! 😊`;
         
-        // Add delay to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // 5. Add delay to prevent blocking
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
-        // Send message
-        await api.sendMessage(welcomeMessage, threadID);
+        // 6. Send with error handling
+        await api.sendMessage({
+          body: welcomeMessage,
+          mentions: newMembers.map(user => ({
+            tag: user.fullName || '',
+            id: user.userFbId
+          }))
+        }, threadID);
         
-        console.log(`Sent welcome message in ${threadID}`);
+        console.log(`[WELCOME] Message sent successfully to ${threadID}`);
+        
       } catch (error) {
-        console.error("Welcome error:", error);
+        console.error('[WELCOME ERROR]', error);
       }
     }
   }
