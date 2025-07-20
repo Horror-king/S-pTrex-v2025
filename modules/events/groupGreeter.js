@@ -1,66 +1,60 @@
 module.exports = {
   config: {
-    name: "groupGreeter", // Changed from "welcome"
-    version: "1.0",
+    name: "groupGreeter",
+    version: "5.1",
     author: "Your Name",
     eventType: ["log:subscribe"],
-    description: "Custom greeting when new members join",
+    description: "Working welcome message for new members",
     dependencies: {}
   },
 
   onChat: async function({ api, event }) {
-    // 🌟 CUSTOMIZE THESE VALUES 🌟
-    const settings = {
-      greetingWord: "Hello",    // Change to "Hi", "Welcome", etc.
-      groupTitle: "the family", // Default if can't get group name
-      mainMessage: "We're glad you're here!",
-      signature: "Enjoy your stay! 😊",
-      delay: 1500 // Anti-flood delay in ms
-    };
-    // 🌟 END OF CUSTOMIZATION 🌟
-
     try {
-      // Only handle join events
+      // 1. Only handle subscribe events
       if (event.logMessageType !== "log:subscribe") return;
+      
+      console.log('[GREETER] New member event detected:', JSON.stringify(event, null, 2));
 
-      // Skip if bot was added
+      // 2. Get bot ID and filter out bot addition
       const botID = api.getCurrentUserID();
-      const newMembers = event.logMessageData.addedParticipants
-        .filter(user => user.userFbId !== botID);
-      if (newMembers.length === 0) return;
+      const addedUsers = event.logMessageData.addedParticipants || [];
+      const newMembers = addedUsers.filter(user => user.userFbId !== botID);
+      
+      if (newMembers.length === 0) {
+        return console.log('[GREETER] No real users added');
+      }
 
-      // Get actual group name
-      let groupName = settings.groupTitle;
+      // 3. Get group name with error handling
+      let groupName = "this group";
       try {
-        const info = await api.getThreadInfo(event.threadID);
-        if (info.threadName) groupName = info.threadName;
-      } catch (e) {}
+        const threadInfo = await api.getThreadInfo(event.threadID);
+        groupName = threadInfo.threadName || groupName;
+      } catch (e) {
+        console.error('[GREETER] Error getting thread info:', e);
+      }
 
-      // Prepare mentions
+      // 4. Prepare mentions
       const mentions = newMembers.map(user => ({
         id: user.userFbId,
-        tag: user.fullName || "friend"
+        tag: user.fullName || "New Member"
       }));
 
-      // Construct message
-      const message = `
-${settings.greetingWord} ${mentions.map(m => `@${m.tag}`).join(', ')}!
+      // 5. Create message
+      const welcomeMsg = `👋 Hello ${mentions.map(m => `@${m.tag}`).join(', ')}!\n\n` +
+                       `Welcome to ${groupName}\n` +
+                       `Enjoy your stay! 😊`;
 
-You've joined ${groupName}
-${settings.mainMessage}
-
-${settings.signature}
-      `.trim();
-
-      // Send with delay
-      await new Promise(resolve => setTimeout(resolve, settings.delay));
+      // 6. Send with delay and mentions
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await api.sendMessage({
-        body: message,
+        body: welcomeMsg,
         mentions: mentions
       }, event.threadID);
+      
+      console.log('[GREETER] Welcome message sent successfully');
 
     } catch (error) {
-      console.error("Greeter Error:", error);
+      console.error('[GREETER ERROR]', error);
     }
   }
 };
