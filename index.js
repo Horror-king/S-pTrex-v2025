@@ -72,45 +72,29 @@ const defaultConfigContent = {
     "interval": 300000, // 5 minutes
     "timeout": 60000 // 1 minute
   },
-  "unsendEmojis": ["🤓", "🚫"]
+  "unsendEmojis": ["🤓", "🚫"] // Added this configuration for unsend emojis
 };
 
-// Optimized chalk implementation with cache
+// Fixed chalk implementation with synchronous require and fallback
 let chalk;
-const chalkCache = new Map();
 try {
   chalk = require('chalk');
-  // Cache common methods
-  ['red', 'green', 'blue', 'yellow', 'blueBright'].forEach(method => {
-    chalkCache.set(method, chalk[method]);
-  });
 } catch (e) {
-  // Fallback to simple ANSI colors with caching
-  const ansiColors = {
-    red: text => `\x1b[31m${text}\x1b[0m`,
-    green: text => `\x1b[32m${text}\x1b[0m`,
-    blue: text => `\x1b[34m${text}\x1b[0m`,
-    yellow: text => `\x1b[33m${text}\x1b[0m`,
-    blueBright: text => `\x1b[94m${text}\x1b[0m`,
-    hex: color => {
-      const cached = chalkCache.get(color);
-      if (cached) return cached;
-      
+  // Fallback to simple ANSI colors if chalk can't be loaded
+  chalk = {
+    red: (text) => `\x1b[31m${text}\x1b[0m`,
+    green: (text) => `\x1b[32m${text}\x1b[0m`,
+    blue: (text) => `\x1b[34m${text}\x1b[0m`,
+    yellow: (text) => `\x1b[33m${text}\x1b[0m`,
+    blueBright: (text) => `\x1b[94m${text}\x1b[0m`,
+    hex: (color) => (text) => {
       const hex = color.replace('#', '');
       const r = parseInt(hex.substring(0, 2), 16);
       const g = parseInt(hex.substring(2, 4), 16);
       const b = parseInt(hex.substring(4, 6), 16);
-      const fn = text => `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
-      chalkCache.set(color, fn);
-      return fn;
+      return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
     }
   };
-  chalk = new Proxy(ansiColors, {
-    get(target, prop) {
-      if (prop in target) return target[prop];
-      return text => text; // Return unmodified text for unknown methods
-    }
-  });
   console.warn("Using fallback chalk implementation. For full features, run: npm install chalk@4.1.2");
 }
 
@@ -149,11 +133,12 @@ global.utils = {
 
     try {
       const res = await axios.get(`https://graph.facebook.com/${usernameOrId}?fields=id&access_token=350685531728|62f8ce9f74b12f84c123cc23437a4a32`);
-      return res.data?.id || (() => {
+      if (!res.data || !res.data.id) {
         const error = new Error("Profile doesn't exist");
         error.name = "LinkNotExist";
         throw error;
-      })();
+      }
+      return res.data.id;
     } catch (err) {
       const error = new Error("Failed to fetch UID");
       error.name = "CannotGetData";
@@ -162,46 +147,41 @@ global.utils = {
   }
 };
 
-// ======== OPTIMIZED PERSISTENT STORAGE SYSTEM ========
+// ======== ENHANCED PERSISTENT STORAGE SYSTEM ========
 const DATA_DIR = path.join(__dirname, 'data');
 const PERSISTENT_FILE = path.join(DATA_DIR, 'persistent.json');
 
-// Ensure data directory exists once at startup
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-// Cache for persistent data
-let persistentDataCache = null;
+// Ensure data directory exists
+fs.ensureDirSync(DATA_DIR);
 
 function loadPersistentData() {
-  if (persistentDataCache) return persistentDataCache;
-  
   try {
     if (fs.existsSync(PERSISTENT_FILE)) {
       const data = JSON.parse(fs.readFileSync(PERSISTENT_FILE, 'utf8'));
-      persistentDataCache = {
-        installedCommands: Array.isArray(data.installedCommands) ? data.installedCommands : [],
-        adminMode: data.adminMode && typeof data.adminMode === 'object' ? {
-          enabled: !!data.adminMode.enabled,
-          adminUserIDs: Array.isArray(data.adminMode.adminUserIDs) ? data.adminMode.adminUserIDs : []
-        } : { enabled: false, adminUserIDs: [] }
-      };
-      return persistentDataCache;
+      // Validate loaded data structure
+      if (!data.installedCommands || !Array.isArray(data.installedCommands)) {
+        data.installedCommands = [];
+      }
+      if (!data.adminMode || typeof data.adminMode !== 'object') {
+        data.adminMode = { enabled: false, adminUserIDs: [] };
+      }
+      return data;
     }
   } catch (e) {
     console.error("Error loading persistent data:", e);
   }
-  
-  persistentDataCache = {
+  return {
     installedCommands: [],
-    adminMode: { enabled: false, adminUserIDs: [] }
+    adminMode: {
+      enabled: false,
+      adminUserIDs: []
+    }
   };
-  return persistentDataCache;
 }
 
 function savePersistentData(data) {
   try {
+    // Ensure we're only saving valid data
     const saveData = {
       installedCommands: Array.isArray(data.installedCommands) ? data.installedCommands : [],
       adminMode: {
@@ -209,12 +189,7 @@ function savePersistentData(data) {
         adminUserIDs: Array.isArray(data.adminMode?.adminUserIDs) ? data.adminMode.adminUserIDs : []
       }
     };
-    
-    // Only write if data has changed
-    if (JSON.stringify(saveData) !== JSON.stringify(persistentDataCache)) {
-      fs.writeFileSync(PERSISTENT_FILE, JSON.stringify(saveData, null, 2));
-      persistentDataCache = saveData;
-    }
+    fs.writeFileSync(PERSISTENT_FILE, JSON.stringify(saveData, null, 2));
     return true;
   } catch (e) {
     console.error("Error saving persistent data:", e);
@@ -225,7 +200,7 @@ function savePersistentData(data) {
 // Load persistent data at startup
 const persistentData = loadPersistentData();
 
-// ======== CREATOR PROTECTION ========
+// ======== ADD CREATOR PROTECTION HERE ========
 const CREATOR_NAME = "Hassan";
 let creatorName = CREATOR_NAME;
 
@@ -237,7 +212,7 @@ function protectCreatorName() {
   }
 }
 
-// Display creator name at startup
+// Display creator name at startup (now using the properly initialized chalk)
 console.log(chalk.blueBright(`\n========================================`));
 console.log(chalk.blueBright(`=                                      =`));
 console.log(chalk.blueBright(`=        BOT CREATOR: ${CREATOR_NAME}${' '.repeat(15 - CREATOR_NAME.length)}=`));
@@ -245,36 +220,45 @@ console.log(chalk.blueBright(`=                                      =`));
 console.log(chalk.blueBright(`========================================\n`));
 
 // Periodic creator name checks
-setInterval(protectCreatorName, 60000);
+setInterval(protectCreatorName, 60000); // Check every minute
+// ======== END OF CREATOR PROTECTION ========
 
-// Define defaultEmojiTranslate early
+// Define defaultEmojiTranslate early so it's accessible globally and for config.json init
 const defaultEmojiTranslate = "🌐";
 
 // Global adminMode object - initialized from persistent data
-global.adminMode = persistentData.adminMode;
+global.adminMode = persistentData.adminMode || {
+    enabled: false,
+    adminUserIDs: []
+};
 
 // Track installed commands from persistent data
-global.installedCommands = persistentData.installedCommands;
+global.installedCommands = persistentData.installedCommands || [];
 
-// --- Optimized Logger with cache ---
-const themeColorsCache = {
-  cra: chalk.hex("#FF0000"),
-  cv: chalk.hex("#00FFFF"),
-  cb: chalk.hex("#0000FF")
+// --- Logger ---
+const getThemeColors = () => {
+  return {
+    cra: chalk.hex("#FF0000"),
+    cv: chalk.hex("#00FFFF"),
+    cb: chalk.hex("#0000FF"),
+  };
 };
 
 const logger = {
   log: (message, tag = "INFO") => {
     protectCreatorName();
-    console.log(`${themeColorsCache.cv(`[${tag}]`)} ${message}`);
+    const { cv } = getThemeColors();
+    console.log(`${cv(`[${tag}]`)} ${message}`);
   },
   loader: (message, tag = "LOADER") => {
     protectCreatorName();
-    console.log(`${themeColorsCache.cb(`[${tag}]`)} ${message}`);
+    const { cb } = getThemeColors();
+    console.log(`${cb(`[${tag}]`)} ${message}`);
   },
   err: (message, tag = "ERROR") => {
     protectCreatorName();
-    console.error(`${themeColorsCache.cra(`[${tag}]`)} ${message}`);
+    const { cra } = getThemeColors();
+    console.error(`${cra(`[${tag}]`)} ${message}`);
   },
   warn: (message, tag = "WARN") => {
     protectCreatorName();
@@ -282,7 +266,7 @@ const logger = {
   }
 };
 
-// --- Optimized Utilities ---
+// --- Utilities ---
 const utils = {
   decryptState: (encryptedState, key) => {
     logger.warn("DecryptState is a placeholder. Implement actual decryption if 'encryptSt' is true.", "DECRYPT_WARN");
@@ -294,18 +278,19 @@ const utils = {
   },
   humanDelay: async () => {
     const currentConfig = global.config || defaultConfigContent;
-    const { min, max } = currentConfig.humanLikeDelay;
+    const min = currentConfig.humanLikeDelay.min;
+    const max = currentConfig.humanLikeDelay.max;
     const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-    if (delay > 3000) logger.log(`Adding human-like delay of ${delay}ms...`, "DELAY");
+    logger.log(`Adding human-like delay of ${delay}ms...`, "DELAY");
     return new Promise(resolve => setTimeout(resolve, delay));
   },
   findUid: async (profileUrl) => {
     logger.warn(`[WARNING] global.utils.findUid is a placeholder. It needs a proper implementation to resolve Facebook profile URLs.`, "UID_WARN");
     if (profileUrl && profileUrl.includes("facebook.com/profile.php?id=")) {
-      const match = profileUrl.match(/id=(\d+)/);
-      return match?.[1] || (() => {
-        throw new Error("Could not find UID for the provided link. global.utils.findUid requires implementation.");
-      })();
+        const match = profileUrl.match(/id=(\d+)/);
+        if (match && match[1]) {
+            return match[1];
+        }
     }
     throw new Error("Could not find UID for the provided link. global.utils.findUid requires implementation.");
   },
@@ -319,16 +304,17 @@ const utils = {
     });
 
     // Notify admins if configured
-    if (global.config.autoRestart.notifyAdmins && global.config.ADMINBOT?.length > 0) {
-      const notifyPromises = global.config.ADMINBOT.map(adminID => 
-        api.sendMessage(
-          `♻️ Bot is restarting automatically as scheduled.\nReason: ${reason}\nIt should be back online shortly.`,
-          adminID
-        ).catch(e => {
+    if (global.config.autoRestart.notifyAdmins && global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
+      for (const adminID of global.config.ADMINBOT) {
+        try {
+          await api.sendMessage(
+            `♻️ Bot is restarting automatically as scheduled.\nReason: ${reason}\nIt should be back online shortly.`,
+            adminID
+          );
+        } catch (e) {
           logger.err(`Failed to send restart notification to admin ${adminID}: ${e.message}`, "RESTART_NOTIFY");
-        })
-      );
-      await Promise.all(notifyPromises);
+        }
+      }
     }
 
     // Delay to allow notifications to send
@@ -344,16 +330,19 @@ const utils = {
     });
     process.exit();
   },
+  // FIXED HEARTBEAT FUNCTION - CORRECTED SYNTAX ERROR
   checkHeartbeat: async (api) => {
     if (!global.config.heartbeat?.enabled) return true;
     
     try {
+      // Simple check to see if API is responsive
       const startTime = Date.now();
       await Promise.race([
         api.getThreadList(1, null, ['INBOX']),
         new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Heartbeat timeout')), 
-          global.config.heartbeat.timeout || 60000);
+          setTimeout(() => {
+            reject(new Error('Heartbeat timeout'));
+          }, global.config.heartbeat.timeout || 60000);
         })
       ]);
       const responseTime = Date.now() - startTime;
@@ -366,25 +355,24 @@ const utils = {
   }
 };
 
-// --- Optimized Thread Data Manager ---
+// --- Thread Data Manager ---
 function createThreadDataManager() {
     const threadDataStore = new Map();
 
     return {
         get: async (threadID, path) => {
-            const current = threadDataStore.get(threadID);
+            let current = threadDataStore.get(threadID);
             if (!current) return undefined;
 
             const pathParts = path.split('.');
-            let result = current;
             for (const part of pathParts) {
-                if (result instanceof Map) {
-                    result = result.get(part);
+                if (current && typeof current === 'object' && current.has(part)) {
+                    current = current.get(part);
                 } else {
                     return undefined;
                 }
             }
-            return result;
+            return current;
         },
         set: async (threadID, value, path) => {
             if (!threadDataStore.has(threadID)) {
@@ -392,32 +380,34 @@ function createThreadDataManager() {
             }
             let current = threadDataStore.get(threadID);
             const pathParts = path.split('.');
-            
-            for (let i = 0; i < pathParts.length - 1; i++) {
+            for (let i = 0; i < pathParts.length; i++) {
                 const part = pathParts[i];
-                if (!current.has(part)) {
-                    current.set(part, new Map());
+                if (i === pathParts.length - 1) {
+                    current.set(part, value);
+                } else {
+                    if (!current.has(part) || !(current.get(part) instanceof Map)) {
+                        current.set(part, new Map());
+                    }
+                    current = current.get(part);
                 }
-                current = current.get(part);
             }
-            
-            current.set(pathParts[pathParts.length - 1], value);
         },
         delete: async (threadID, path) => {
-            const current = threadDataStore.get(threadID);
+            let current = threadDataStore.get(threadID);
             if (!current) return;
 
             const pathParts = path.split('.');
-            let target = current;
-            
-            for (let i = 0; i < pathParts.length - 1; i++) {
+            for (let i = 0; i < pathParts.length; i++) {
                 const part = pathParts[i];
-                if (!target.has(part)) return;
-                target = target.get(part);
+                if (i === pathParts.length - 1) {
+                    current.delete(part);
+                } else {
+                    if (!current.has(part) || !(current.get(part) instanceof Map)) {
+                        return;
+                    }
+                    current = current.get(part);
+                }
             }
-            
-            target.delete(pathParts[pathParts.length - 1]);
-            
             if (threadDataStore.get(threadID)?.size === 0) {
                 threadDataStore.delete(threadID);
             }
@@ -425,26 +415,29 @@ function createThreadDataManager() {
     };
 }
 
-// --- Optimized Listener Function ---
+// --- Listener Function ---
 const listen = ({ api }) => {
-    // Pre-compile regex patterns
-    const prefixCommandRegex = /^(?:prefix|\?prefix|Prefix)\s*$/i;
-    const prefixChangeRegex = /^(?:prefix|\?prefix|Prefix)\s+(\S+)/i;
-    
     return async (error, event) => {
         try {
-            // Skip if error exists
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 100));
+
             if (error) {
                 logger.err(`Listen error: ${error.message}`, "LISTENER_ERROR");
                 if (error.error === 'Not logged in' || error.error === 'Login approval needed') {
-                    logger.warn("Bot session expired or invalid. Attempting to re-login via FCA's autoReconnect.", "SESSION_EXPIRED");
+                    logger.warn("Bot session expired or invalid. Attempting to re-login via FCA's autoReconnect. If persistent, check appstate.json.", "SESSION_EXPIRED");
                 }
                 return;
             }
 
-            // Fast validation
-            if (!event || typeof event !== 'object' || (!event.type && !event.logMessageType)) {
-                logger.err("Invalid event object", "EVENT_VALIDATION");
+            // Enhanced event validation
+            if (!event || typeof event !== 'object') {
+                logger.err("Received invalid event object", "EVENT_VALIDATION");
+                return;
+            }
+
+            // Skip processing if event is missing required properties
+            if (!event.type && !event.logMessageType) {
+                logger.err("Event missing type information", "EVENT_VALIDATION");
                 return;
             }
 
@@ -454,20 +447,12 @@ const listen = ({ api }) => {
                 return;
             }
 
-            // Skip empty messages with no attachments
-            if (!event.body && (!event.attachments || event.attachments.length === 0)) {
-                return;
-            }
-
-            // Initialize global.api if not exists
-            global.api = api;
-            global.api.handleReply = global.api.handleReply || new Map();
-
-            // Process video attachments first
-            if (event.attachments?.length > 0) {
+            // Special handling for video messages
+            if (event.attachments && event.attachments.length > 0) {
                 const videoAttachments = event.attachments.filter(att => att.type === "video");
                 if (videoAttachments.length > 0) {
                     logger.log(`Received video message with ${videoAttachments.length} video(s)`, "VIDEO_MESSAGE");
+                    // Skip processing or add your video handling logic here
                     return;
                 }
             }
@@ -479,52 +464,56 @@ const listen = ({ api }) => {
                 logger.log(`Received log message event: ${event.logMessageType}`, "LOG_EVENT");
             }
 
-            // Process log message events
             if (event.logMessageType) {
-                const logEventPromises = global.client.events
-                    .filter(eventModule => eventModule.config.eventType?.includes("event") && eventModule.onChat)
-                    .map(eventModule => {
-                        logger.log(`Executing event handler for ${event.logMessageType} for module: ${eventModule.config.name}`, "LOG_EVENT_HANDLER");
-                        return eventModule.onChat({
-                            api,
-                            event,
-                            threadsData: global.data.threads,
-                            getLang: global.getText,
-                            commandName: eventModule.config.name
-                        }).catch(e => {
+                global.client.events.forEach(async (eventModule) => {
+                    if (eventModule.config.eventType && eventModule.config.eventType.includes("event") && eventModule.onChat) {
+                        try {
+                            logger.log(`Executing event handler for logMessageType: ${event.logMessageType} for module: ${eventModule.config.name}`, "LOG_EVENT_HANDLER");
+                            await eventModule.onChat({
+                                api,
+                                event,
+                                threadsData: global.data.threads,
+                                getLang: global.getText,
+                                commandName: eventModule.config.name
+                            });
+                        } catch (e) {
                             logger.err(`Error executing log event handler for '${eventModule.config.name}': ${e.message}`, "LOG_EVENT_EXEC_ERROR");
-                        });
-                    });
-                
-                await Promise.all(logEventPromises);
-                
-                if (event.logMessageType === "log:subscribe" && 
-                    event.logMessageData?.addedParticipants?.some(i => i.userFbId == api.getCurrentUserID())) {
+                        }
+                    }
+                });
+                if (event.logMessageType === "log:subscribe" && event.logMessageData?.addedParticipants?.some(i => i.userFbId == api.getCurrentUserID())) {
                     return;
                 }
             }
 
-            // Skip if in admin mode and user is not admin
             if (global.adminMode.enabled && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
                 return;
             }
 
-            // Handle message_reaction events
+            // Check if event has type property before accessing it
             if (event.type === "message_reaction") {
                 if (!event.messageID) {
                     logger.err("Message reaction event missing messageID", "EVENT_ERROR");
                     return;
                 }
 
-                // Handle unsend emoji reactions
+                // NEW CODE: Handle unsend emoji reactions
                 const currentConfig = global.config || defaultConfigContent;
                 const unsendEmojis = currentConfig.unsendEmojis || ["🤓", "🚫"];
                 
                 if (unsendEmojis.includes(event.reaction)) {
                     try {
-                        const isAdmin = global.config.ADMINBOT.includes(event.senderID);
-                        let isParticipant = false;
+                        // Instead of getMessageInfo, we'll use a simpler approach
+                        // Since we can't reliably get message info, we'll:
+                        // 1. Allow admins to unsend any message
+                        // 2. Allow users to unsend their own messages
+                        // 3. In group chats, allow participants to unsend bot messages
                         
+                        // First check if the reactor is an admin
+                        const isAdmin = global.config.ADMINBOT.includes(event.senderID);
+                        
+                        // For non-admins, we need to check if they're in the same thread
+                        let isParticipant = false;
                         if (!isAdmin) {
                             try {
                                 const threadInfo = await api.getThreadInfo(event.threadID);
@@ -535,12 +524,13 @@ const listen = ({ api }) => {
                         }
                         
                         if (isAdmin || isParticipant) {
-                            logger.log(`Unsend triggered by ${event.senderID} with reaction ${event.reaction}`, "UNSEND_REACTION");
+                            logger.log(`Unsend triggered by ${event.senderID} with reaction ${event.reaction} on message ${event.messageID}`, "UNSEND_REACTION");
                             await api.unsendMessage(event.messageID);
+                            return;
                         } else {
-                            logger.log(`User ${event.senderID} tried to unsend but lacks permission`, "UNSEND_PERMISSION_DENIED");
+                            logger.log(`User ${event.senderID} tried to unsend message ${event.messageID} but lacks permission`, "UNSEND_PERMISSION_DENIED");
+                            return;
                         }
-                        return;
                     } catch (e) {
                         logger.err(`Error processing unsend reaction: ${e.message}`, "UNSEND_REACTION_ERROR");
                     }
@@ -560,11 +550,10 @@ const listen = ({ api }) => {
                         );
                     }
 
-                    const module = global.client.commands.get(reactionHandler.commandName) || 
-                                 global.client.events.get(reactionHandler.commandName);
-                    if (module?.onReaction) {
+                    const module = global.client.commands.get(reactionHandler.commandName) || global.client.events.get(reactionHandler.commandName);
+                    if (module && module.onReaction) {
                         try {
-                            logger.log(`Executing reaction handler for ${module.config.name}`, "REACTION_EVENT");
+                            logger.log(`Executing reaction handler for ${module.config.name} (message ID: ${event.messageID})`, "REACTION_EVENT");
                             await utils.humanDelay();
                             await module.onReaction({
                                 api,
@@ -585,14 +574,25 @@ const listen = ({ api }) => {
                 return;
             }
 
-            // Handle message and message_reply events
+            // 🟢 Ensure global.api and global.api.handleReply are initialized properly
+            global.api = api;
+            global.api.handleReply = global.api.handleReply || new Map();
+
             if (event.type === "message" || event.type === "message_reply") {
-                const lowerCaseBody = event.body?.toLowerCase() || '';
+                // Skip if message is empty and has no attachments
+                if (!event.body && (!event.attachments || event.attachments.length === 0)) {
+                    logger.log("Received empty message with no attachments", "EMPTY_MESSAGE");
+                    return;
+                }
+
+                const lowerCaseBody = event.body ? event.body.toLowerCase() : '';
                 const systemPrefix = global.config.PREFIX;
-                const threadPrefix = await global.data.threads.get(event.threadID, "data.prefix") || systemPrefix;
+                let threadPrefix = await global.data.threads.get(event.threadID, "data.prefix") || systemPrefix;
                 let commandFoundAndExecuted = false;
 
-                // Handle prefix commands
+                // ======= HANDLE PREFIX COMMANDS =======
+                // Check for prefix command in various formats
+                const prefixCommandRegex = /^(?:prefix|\?prefix|Prefix)\s*$/i;
                 if (prefixCommandRegex.test(event.body.trim())) {
                     await utils.humanDelay();
                     return api.sendMessage(
@@ -602,10 +602,12 @@ const listen = ({ api }) => {
                     );
                 }
 
-                // Handle prefix change
+                // Handle prefix change command in various formats
+                const prefixChangeRegex = /^(?:prefix|\?prefix|Prefix)\s+(\S+)/i;
                 const prefixChangeMatch = event.body.match(prefixChangeRegex);
                 if (prefixChangeMatch) {
                     const newPrefix = prefixChangeMatch[1];
+
                     if (newPrefix.length > 3) {
                         return api.sendMessage("Prefix must be 1-3 characters long.", event.threadID, event.messageID);
                     }
@@ -626,14 +628,26 @@ const listen = ({ api }) => {
                     return;
                 }
 
-                // Handle reply events
-                if (event.type === "message_reply" && event.messageReply?.messageID) {
-                    const replyHandler = global.api.handleReply.get(event.messageReply.messageID);
-                    if (replyHandler && replyHandler.threadID === event.threadID) {
+                // ======= HANDLE REPLY =======
+                if (event.type === "message_reply") {
+                    if (!event.messageReply || !event.messageReply.messageID) {
+                        logger.err("Invalid reply event - missing messageReply data", "REPLY_ERROR");
+                        return;
+                    }
+
+                    const repliedToMessageID = event.messageReply.messageID;
+                    const threadID = event.threadID;
+                    const replierSenderID = event.senderID;
+
+                    const replyHandler = global.api.handleReply.get(repliedToMessageID);
+
+                    if (replyHandler && replyHandler.threadID === threadID) {
                         const command = global.client.commands.get(replyHandler.name);
-                        if (command?.onReply) {
+
+                        if (command && typeof command.onReply === "function") {
                             try {
                                 await utils.humanDelay();
+
                                 await command.onReply({
                                     api,
                                     event,
@@ -641,7 +655,7 @@ const listen = ({ api }) => {
                                     message: {
                                         reply: async (msg) => {
                                             await utils.humanDelay();
-                                            api.sendMessage(msg, event.threadID, event.messageID);
+                                            api.sendMessage(msg, threadID, event.messageID);
                                         },
                                         unsend: async (msgID) => {
                                             await utils.humanDelay();
@@ -653,30 +667,32 @@ const listen = ({ api }) => {
                                     getLang: global.getText,
                                     commandName: command.config.name
                                 });
+
                                 commandFoundAndExecuted = true;
                             } catch (e) {
-                                logger.err(`[REPLY_ERROR] ${e.message}`);
+                                console.error(`[REPLY_ERROR] ${e.message}`);
                                 await utils.humanDelay();
-                                api.sendMessage(`❌ Error while processing reply for '${replyHandler.name}':\n${e.message}`, event.threadID, event.messageID);
+                                api.sendMessage(`❌ Error while processing reply for '${replyHandler.name}':\n${e.message}`, threadID, event.messageID);
                                 commandFoundAndExecuted = true;
                             }
                         } else {
-                            global.api.handleReply.delete(event.messageReply.messageID);
+                            global.api.handleReply.delete(repliedToMessageID);
                         }
                     }
                 }
 
                 if (commandFoundAndExecuted) return;
 
-                // Handle onStart commands
+                // ======= HANDLE onStart COMMANDS =======
                 if (lowerCaseBody.startsWith(threadPrefix)) {
                     const args = event.body.slice(threadPrefix.length).trim().split(/\s+/);
                     const commandName = args.shift().toLowerCase();
 
-                    const command = global.client.commands.get(commandName) ||
+                    const command =
+                        global.client.commands.get(commandName) ||
                         [...global.client.commands.values()].find(cmd => cmd.config.aliases?.includes(commandName));
 
-                    if (command?.onStart) {
+                    if (command && typeof command.onStart === "function") {
                         try {
                             await utils.humanDelay();
                             await command.onStart({
@@ -698,21 +714,24 @@ const listen = ({ api }) => {
                                 getLang: global.getText,
                                 commandName: command.config.name
                             });
+
                             commandFoundAndExecuted = true;
                         } catch (err) {
-                            logger.err(`[COMMAND_ERROR] Error in onStart for '${commandName}': ${err.message}`);
+                            console.error(`[COMMAND_ERROR] Error in onStart for '${commandName}': ${err.message}`);
                             api.sendMessage(`❌ Error while executing '${commandName}' command:\n${err.message}`, event.threadID, event.messageID);
                         }
                     }
                 }
 
-                // Handle non-prefix commands
                 for (const cmdNameLower of global.client.nonPrefixCommands) {
                     if (lowerCaseBody === cmdNameLower || lowerCaseBody.startsWith(`${cmdNameLower} `)) {
-                        const foundCommand = [...global.client.commands.values()].find(cmd => 
-                            cmd.config.name.toLowerCase() === cmdNameLower && 
-                            (cmd.config.usePrefix === false || cmd.config.usePrefix === "both")
-                        );
+                        let foundCommand = null;
+                        for (const [key, cmdModule] of global.client.commands.entries()) {
+                            if (key.toLowerCase() === cmdNameLower && (cmdModule.config.usePrefix === false || cmdModule.config.usePrefix === "both")) {
+                                foundCommand = cmdModule;
+                                break;
+                            }
+                        }
 
                         if (foundCommand) {
                             if (global.adminMode.enabled && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
@@ -722,18 +741,16 @@ const listen = ({ api }) => {
                                 break;
                             }
 
-                            const promptText = lowerCaseBody.startsWith(`${cmdNameLower} `) ? 
-                                event.body.slice(cmdNameLower.length + 1).trim() : "";
+                            const promptText = lowerCaseBody.startsWith(`${cmdNameLower} `) ? event.body.slice(cmdNameLower.length + 1).trim() : "";
                             const args = promptText.split(/ +/).filter(Boolean);
 
-                            if (foundCommand.config.hasPermssion > 0 && 
-                                foundCommand.config.hasPermssion === 1 && 
-                                event.senderID && 
-                                !global.adminMode.adminUserIDs.includes(event.senderID)) {
-                                await utils.humanDelay();
-                                api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
-                                commandFoundAndExecuted = true;
-                                break;
+                            if (foundCommand.config.hasPermssion !== undefined && foundCommand.config.hasPermssion > 0) {
+                                if (foundCommand.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
+                                    await utils.humanDelay();
+                                    api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
+                                    commandFoundAndExecuted = true;
+                                    break;
+                                }
                             }
 
                             try {
@@ -744,8 +761,7 @@ const listen = ({ api }) => {
                                     const info = {};
                                     await runFunction({
                                         api, event, args, global, prompt: promptText,
-                                        threadsData: global.data.threads, getLang: global.getText, 
-                                        commandName: foundCommand.config.name,
+                                        threadsData: global.data.threads, getLang: global.getText, commandName: foundCommand.config.name,
                                         message: {
                                             reply: async (msg, cb) => {
                                                 await utils.humanDelay();
@@ -756,15 +772,12 @@ const listen = ({ api }) => {
                                                     }
                                                     if (cb) cb(err, msgInfo);
                                                 });
-                                                if (messageInfo?.messageID) {
+                                                if (messageInfo && messageInfo.messageID) {
                                                     info.messageID = messageInfo.messageID;
                                                     info.threadID = event.threadID;
                                                 }
                                             },
-                                            unsend: async (mid) => { 
-                                                await utils.humanDelay(); 
-                                                api.unsendMessage(mid); 
-                                            }
+                                            unsend: async (mid) => { await utils.humanDelay(); api.unsendMessage(mid); }
                                         },
                                         info
                                     });
@@ -775,7 +788,7 @@ const listen = ({ api }) => {
                                             threadID: event.threadID,
                                             author: event.senderID
                                         });
-                                        logger.log(`Registered reply handler for message ID: ${info.messageID}`, "REPLY_REGISTER");
+                                        logger.log(`Registered reply handler for message ID: ${info.messageID} (Command: ${foundCommand.config.name})`, "REPLY_REGISTER");
                                     }
                                 }
                                 commandFoundAndExecuted = true;
@@ -789,27 +802,31 @@ const listen = ({ api }) => {
                     }
                 }
 
-                if (commandFoundAndExecuted) return;
+                if (commandFoundAndExecuted) {
+                    return;
+                }
 
-                // Handle prefix commands with proper validation
-                if (event.body?.startsWith(threadPrefix)) {
+                if (event.body && event.body.startsWith(threadPrefix)) {
                     const args = event.body.slice(threadPrefix.length).trim().split(/ +/);
                     const commandName = args.shift()?.toLowerCase();
 
                     if (!commandName) {
                         await utils.humanDelay();
                         return api.sendMessage(
-                            `⚠️ The command you are using does not exist.\nType ${threadPrefix}help to see all available commands.`,
+                            `⚠️ The command you are using does not exist.\n` +
+                            `Type ${threadPrefix}help to see all available commands.`,
                             event.threadID,
                             event.messageID
                         );
                     }
 
                     const command = global.client.commands.get(commandName);
+
                     if (!command) {
                         await utils.humanDelay();
                         return api.sendMessage(
-                            `⚠️ The command "${threadPrefix}${commandName}" does not exist.\nType ${threadPrefix}help to see all available commands.`,
+                            `⚠️ The command "${threadPrefix}${commandName}" does not exist.\n` +
+                            `Type ${threadPrefix}help to see all available commands.`,
                             event.threadID,
                             event.messageID
                         );
@@ -818,7 +835,8 @@ const listen = ({ api }) => {
                     if (command.config.usePrefix === false) {
                         await utils.humanDelay();
                         return api.sendMessage(
-                            `⚠️ The command "${command.config.name}" does not require a prefix.\nJust type "${command.config.name} ${command.config.guide?.en?.split('\n')[0]?.replace(/.*<prompt>\s*/, '').trim() || ''}" to use it.`,
+                            `⚠️ The command "${command.config.name}" does not require a prefix.\n` +
+                            `Just type "${command.config.name} ${command.config.guide ? command.config.guide.en.split('\n')[0].replace(/.*<prompt>\s*/, '').trim() : ''}" to use it.`,
                             event.threadID,
                             event.messageID
                         );
@@ -830,13 +848,12 @@ const listen = ({ api }) => {
                     }
 
                     try {
-                        if (command.config.hasPermssion > 0 && 
-                            command.config.hasPermssion === 1 && 
-                            event.senderID && 
-                            !global.adminMode.adminUserIDs.includes(event.senderID)) {
-                            await utils.humanDelay();
-                            api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
-                            return;
+                        if (command.config.hasPermssion !== undefined && command.config.hasPermssion > 0) {
+                            if (command.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
+                                await utils.humanDelay();
+                                api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
+                                return;
+                            }
                         }
 
                         logger.log(`Executing command: ${command.config.name}`, "COMMAND");
@@ -847,8 +864,7 @@ const listen = ({ api }) => {
                             const info = {};
                             await runFunction({
                                 api, event, args, global, prompt: prefixedPrompt,
-                                threadsData: global.data.threads, getLang: global.getText, 
-                                commandName: command.config.name,
+                                threadsData: global.data.threads, getLang: global.getText, commandName: command.config.name,
                                 message: {
                                     reply: async (msg, cb) => {
                                         await utils.humanDelay();
@@ -859,15 +875,12 @@ const listen = ({ api }) => {
                                             }
                                             if (cb) cb(err, msgInfo);
                                         });
-                                        if (messageInfo?.messageID) {
+                                        if (messageInfo && messageInfo.messageID) {
                                             info.messageID = messageInfo.messageID;
                                             info.threadID = event.threadID;
                                         }
                                     },
-                                    unsend: async (mid) => { 
-                                        await utils.humanDelay(); 
-                                        api.unsendMessage(mid); 
-                                    }
+                                    unsend: async (mid) => { await utils.humanDelay(); api.unsendMessage(mid); }
                                 },
                                 info
                             });
@@ -878,7 +891,7 @@ const listen = ({ api }) => {
                                     threadID: event.threadID,
                                     author: event.senderID
                                 });
-                                logger.log(`Registered reply handler for message ID: ${info.messageID}`, "REPLY_REGISTER");
+                                logger.log(`Registered reply handler for message ID: ${info.messageID} (Command: ${command.config.name})`, "REPLY_REGISTER");
                             }
                         }
                     } catch (e) {
@@ -889,33 +902,29 @@ const listen = ({ api }) => {
                     return;
                 }
 
-                // Process onChat events in parallel
-                const onChatPromises = global.client.events
-                    .filter(eventModule => 
-                        eventModule.config.eventType?.includes("message") && 
-                        eventModule.onChat
-                    )
-                    .map(eventModule => 
-                        eventModule.onChat({
-                            api,
-                            event,
-                            threadsData: global.data.threads,
-                            getLang: global.getText,
-                            commandName: eventModule.config.name
-                        }).catch(e => {
+                global.client.events.forEach(async (eventModule) => {
+                    if (eventModule.config.eventType && eventModule.config.eventType.includes("message") && eventModule.onChat) {
+                        try {
+                            await eventModule.onChat({
+                                api,
+                                event,
+                                threadsData: global.data.threads,
+                                getLang: global.getText,
+                                commandName: eventModule.config.name
+                            });
+                        } catch (e) {
                             logger.err(`Error executing onChat event for '${eventModule.config.name}': ${e.message}`, "ON_CHAT_EXEC_ERROR");
-                            return api.sendMessage(
+                            await api.sendMessage(
                                 `⚠️ An error occurred in event handler:\n${e.message}`,
                                 event.threadID
                             );
-                        })
-                    );
-                
-                await Promise.all(onChatPromises);
+                        }
+                    }
+                });
             }
         } catch (err) {
             logger.err(`Error in listener function: ${err.message}`, "LISTENER_ERROR");
-            if (event?.threadID) {
+            if (event && event.threadID) {
                 await api.sendMessage(
                     `⚠️ A system error occurred:\n${err.message}`,
                     event.threadID
