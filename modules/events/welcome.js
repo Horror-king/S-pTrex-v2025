@@ -1,64 +1,77 @@
+const { getTime } = global.utils;
+
 module.exports = {
   config: {
     name: "welcome",
-    version: "4.0",
-    author: "Your Name",
-    eventType: ["log:subscribe"],
-    description: "100% Working Welcome Message",
-    dependencies: {
-      "fs-extra": "",
-      "delay": ""
+    version: "2.0",
+    author: "NTKhang & Modified by Assistant",
+    category: "events",
+    eventType: ["log:subscribe"]
+  },
+
+  langs: {
+    en: {
+      session1: "morning",
+      session2: "noon",
+      session3: "afternoon",
+      session4: "evening",
+      welcomeMessage: "Thank you for adding me to the group!\nMy prefix is: %1\nType %1help to see commands",
+      defaultWelcomeMessage: "👋 Hello {userName}!\nWelcome to {boxName}\nHave a nice {session}! 😊",
+      multiple1: "you",
+      multiple2: "you all"
     }
   },
 
-  onChat: async function({ api, event }) {
+  onStart: async ({ threadsData, message, event, api, getLang }) => {
+    if (event.logMessageType !== "log:subscribe") return;
+
     try {
-      console.log('\n[WELCOME DEBUG] Raw event:', JSON.stringify(event, null, 2));
+      const { threadID } = event;
+      const dataAddedParticipants = event.logMessageData.addedParticipants;
       
-      // 1. Only process subscribe events
-      if (event.logMessageType !== "log:subscribe") return;
-      
-      console.log('[WELCOME] New member detected');
-      
-      // 2. Get added users (skip bot)
-      const botID = api.getCurrentUserID();
-      const addedUsers = event.logMessageData.addedParticipants
-        .filter(user => user.userFbId !== botID);
-      
-      if (addedUsers.length === 0) {
-        return console.log('[WELCOME] Only bot was added');
+      // Check if bot was added
+      if (dataAddedParticipants.some(item => item.userFbId == api.getCurrentUserID())) {
+        const prefix = global.utils.getPrefix(threadID);
+        return message.send(getLang("welcomeMessage", prefix));
       }
-      
-      // 3. Get group name (with fallback)
-      let groupName = "our group";
-      try {
-        const threadInfo = await api.getThreadInfo(event.threadID);
-        groupName = threadInfo.threadName || groupName;
-      } catch (e) {
-        console.log('[WELCOME] Using default group name');
-      }
-      
-      // 4. Create message
-      const names = addedUsers.map(u => u.fullName).join(', ');
-      const welcomeMsg = `🎉 Hello ${names}!\n\n` +
-                        `Welcome to ${groupName}\n` +
-                        `Enjoy your stay! 😊`;
-      
-      // 5. Send with delay and mentions
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      await api.sendMessage({
-        body: welcomeMsg,
-        mentions: addedUsers.map(user => ({
-          tag: user.fullName,
-          id: user.userFbId
-        }))
-      }, event.threadID);
-      
-      console.log('[WELCOME] Message sent successfully!');
-      
-    } catch (error) {
-      console.error('[WELCOME CRITICAL ERROR]', error);
+
+      // Process new members
+      const threadData = await threadsData.get(threadID);
+      if (threadData.settings?.sendWelcomeMessage === false) return;
+
+      const bannedUsers = threadData.data?.banned_ban || [];
+      const validUsers = dataAddedParticipants.filter(user => 
+        !bannedUsers.some(banned => banned.id == user.userFbId)
+      );
+
+      if (validUsers.length === 0) return;
+
+      const now = new Date();
+      const hours = now.getHours();
+      const session = hours <= 10 ? getLang("session1") :
+                     hours <= 12 ? getLang("session2") :
+                     hours <= 18 ? getLang("session3") : 
+                     getLang("session4");
+
+      const mentions = validUsers.map(user => ({
+        tag: user.fullName || "New Member",
+        id: user.userFbId
+      }));
+
+      const welcomeMessage = (threadData.data?.welcomeMessage || getLang("defaultWelcomeMessage"))
+        .replace(/\{userName\}/g, mentions.map(m => m.tag).join(", "))
+        .replace(/\{boxName\}/g, threadData.threadName || "the group")
+        .replace(/\{session\}/g, session)
+        .replace(/\{multiple\}/g, 
+          validUsers.length > 1 ? getLang("multiple2") : getLang("multiple1"));
+
+      await message.send({
+        body: welcomeMessage,
+        mentions: mentions
+      });
+
+    } catch (err) {
+      console.error("Welcome error:", err);
     }
   }
 };
