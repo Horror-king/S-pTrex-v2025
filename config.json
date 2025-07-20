@@ -85,7 +85,7 @@
     "intervalMax": 180
   },
   "autoRestart": {
-    "enabled": true,
+    "enabled": false,
     "schedule": "0 */6 * * *",
     "notifyAdmins": true
   }
