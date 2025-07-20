@@ -60,10 +60,10 @@ const defaultConfigContent = {
   "help": { "autoUnsend": true, "delayUnsend": 60 },
   "adminUpdate": { "autoUnsend": true, "sendNoti": true, "timeToUnsend": 10 },
   "adminNoti": { "autoUnsend": true, "sendNoti": true, "timeToUnsend": 10 },
-  "humanLikeDelay": { "min": 2000, "max": 8000 },
+  "humanLikeDelay": { "min": 200, "max": 800 }, // Changed from 2000-8000 to 200-800 for faster response
   "randomActivity": { "status": true, "intervalMin": 60, "intervalMax": 180 },
   "autoRestart": {
-    "enabled": true,
+    "enabled": false, // Changed from true to false to disable auto-restart
     "schedule": "0 */6 * * *", // Every 6 hours
     "notifyAdmins": true
   },
@@ -75,7 +75,7 @@ const defaultConfigContent = {
   "unsendEmojis": ["🤓", "🚫"] // Added this configuration for unsend emojis
 };
 
-// Fixed chalk implementation with synchronous require and fallback
+// Fixed chalk implementation with sychronous require and fallback
 let chalk;
 try {
   chalk = require('chalk');
