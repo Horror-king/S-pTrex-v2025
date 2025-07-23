@@ -1,7 +1,10 @@
+const fs = require('fs-extra');
+const path = require('path');
+
 module.exports = {
   config: {
     name: "autorestart",
-    version: "1.0",
+    version: "1.1",
     author: "Hassan",
     role: 1, 
     shortDescription: "Toggle auto-restart feature",
@@ -16,58 +19,86 @@ module.exports = {
     try {
       const action = args[0]?.toLowerCase();
       
-      if (!action || (action !== "on" && action !== "off" && action !== "status")) {
+      // Validate input
+      if (!action || !["on", "off", "status"].includes(action)) {
         return api.sendMessage(
-          `Invalid usage. Please use:\n` +
-          `• ${config.PREFIX}autorestart on - Enable auto-restart\n` +
-          `• ${config.PREFIX}autorestart off - Disable auto-restart\n` +
-          `• ${config.PREFIX}autorestart status - Check current status`,
+          `Invalid command usage. Please use one of these:\n` +
+          `› ${config.PREFIX}autorestart on - Enable auto-restart\n` +
+          `› ${config.PREFIX}autorestart off - Disable auto-restart\n` +
+          `› ${config.PREFIX}autorestart status - Check current status`,
           event.threadID,
           event.messageID
         );
       }
 
+      // Handle status check
       if (action === "status") {
-        const status = global.config.autoRestart.enabled ? "🟢 ON" : "🔴 OFF";
-        const nextRestart = global.config.autoRestart.schedule;
+        const status = global.config.autoRestart?.enabled ? "🟢 ON" : "🔴 OFF";
+        const schedule = global.config.autoRestart?.schedule || "Not set";
+        const notify = global.config.autoRestart?.notifyAdmins ? "ON" : "OFF";
+        
         return api.sendMessage(
-          `🔄 Auto-restart status: ${status}\n` +
-          `⏰ Schedule: ${nextRestart}\n` +
-          `👑 Admin notifications: ${global.config.autoRestart.notifyAdmins ? "ON" : "OFF"}`,
+          `⚙️ Auto-Restart Status:\n\n` +
+          `Status: ${status}\n` +
+          `Schedule: ${schedule}\n` +
+          `Admin Notifications: ${notify}`,
           event.threadID,
           event.messageID
         );
       }
 
       // Update the config
-      global.config.autoRestart.enabled = action === "on";
+      const newStatus = action === "on";
       
-      // Save to config file
-      const configPath = path.join(global.client.mainPath, global.client.configPath);
-      fs.writeFileSync(configPath, JSON.stringify(global.config, null, 2));
-      
-      // Notify admins if enabled
-      if (global.config.autoRestart.notifyAdmins && global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
-        const adminMessage = `⚙️ Auto-restart has been ${action === "on" ? "ENABLED" : "DISABLED"} by ${event.senderID}`;
-        for (const adminID of global.config.ADMINBOT) {
-          try {
-            await api.sendMessage(adminMessage, adminID);
-          } catch (e) {
-            console.error(`Failed to notify admin ${adminID}:`, e);
-          }
-        }
+      // Make sure autoRestart object exists
+      if (!global.config.autoRestart) {
+        global.config.autoRestart = {
+          enabled: newStatus,
+          schedule: "0 */6 * * *",
+          notifyAdmins: true
+        };
+      } else {
+        global.config.autoRestart.enabled = newStatus;
       }
 
-      return api.sendMessage(
-        `✅ Auto-restart has been ${action === "on" ? "ENABLED" : "DISABLED"}`,
-        event.threadID,
-        event.messageID
-      );
+      // Save to config file
+      try {
+        const configPath = path.join(global.client.mainPath, global.client.configPath);
+        await fs.writeFile(configPath, JSON.stringify(global.config, null, 2));
+        
+        // Confirm update
+        const successMessage = `✅ Auto-restart has been ${newStatus ? "ENABLED" : "DISABLED"}`;
+        
+        // Notify admins if enabled
+        if (global.config.autoRestart.notifyAdmins && global.config.ADMINBOT?.length > 0) {
+          const adminMessage = `⚙️ System Update:\n${successMessage}\nChanged by: ${event.senderID}`;
+          
+          for (const adminID of global.config.ADMINBOT) {
+            if (adminID !== event.senderID) { // Don't notify the person who made the change
+              try {
+                await api.sendMessage(adminMessage, adminID);
+              } catch (e) {
+                console.error("Failed to notify admin:", e);
+              }
+            }
+          }
+        }
+
+        return api.sendMessage(successMessage, event.threadID, event.messageID);
+
+      } catch (saveError) {
+        console.error("Failed to save config:", saveError);
+        return api.sendMessage(
+          "❌ Failed to save configuration changes. Please check the bot's permissions.",
+          event.threadID,
+          event.messageID
+        );
+      }
 
     } catch (error) {
       console.error("Error in autorestart command:", error);
       return api.sendMessage(
-        "❌ An error occurred while updating auto-restart settings. Please try again.",
+        "❌ An unexpected error occurred. Please check the console for details.",
         event.threadID,
         event.messageID
       );
