@@ -1435,6 +1435,7 @@ for (const property in packageJson.dependencies) {
         logger.err(`Failed to load npm module: ${property} - ${e.message}. Please run 'npm install ${property}'.`, "MODULE_LOAD");
     }
 }
+// [Previous code remains the same until the getText function]
 
 global.getText = function (...args) {
     const langText = global.language;
@@ -1473,10 +1474,10 @@ global.getText = function (...args) {
         }
         return text;
     }
-    return `[Text retrieval failed for ${args[0]}.${args[1]}]`;// [Previous code remains exactly the same until the onBot() function]
+    return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
+};
 
-// [Previous code remains exactly the same until the onBot() function]
-
+// [Rest of your code continues here...]
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
