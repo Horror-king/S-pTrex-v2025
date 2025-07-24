@@ -1473,8 +1473,9 @@ global.getText = function (...args) {
         }
         return text;
     }
-    return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
-};
+    return `[Text retrieval failed for ${args[0]}.${args[1]}]`;// [Previous code remains exactly the same until the onBot() function]
+
+// [Previous code remains exactly the same until the onBot() function]
 
 // --- Main Bot Initialization Function ---
 async function onBot() {
@@ -1572,42 +1573,96 @@ async function onBot() {
         delay: global.config.FCAOption.delay || 500
     };
 
-    // NEW: Login with retry logic and block detection
+    // NEW: Enhanced login with retry logic and block detection
     let api;
-    while (loginAttempts < 3) {
-        try {
-            // Respect retry delay
-            const timeSinceLastAttempt = Date.now() - lastLoginAttempt;
-            if (timeSinceLastAttempt < 30000) { // 30 seconds delay between attempts
-                const waitTime = 30000 - timeSinceLastAttempt;
-                logger.log(`Waiting ${waitTime}ms before next login attempt...`, "LOGIN_STABILITY");
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-            }
+    let loginSuccess = false;
+    const maxLoginAttempts = 3;
+    const loginRetryDelay = 30000; // 30 seconds between attempts
 
-            api = await performLogin(loginData, fcaLoginOptions);
+    for (let attempt = 1; attempt <= maxLoginAttempts; attempt++) {
+        try {
+            logger.log(`Attempting login (attempt ${attempt}/${maxLoginAttempts})`, "LOGIN_ATTEMPT");
             
-            // Check block status immediately after login
-            const blocked = await checkBlockStatus(api);
-            if (blocked) {
+            // Check if account is blocked before attempting login
+            if (isBlocked && Date.now() - lastBlockCheck < 3600000) {
                 throw new Error("Account is blocked. Please check Facebook and verify your account.");
             }
-            
-            break; // Success, exit retry loop
+
+            // Add delay between retries (except first attempt)
+            if (attempt > 1) {
+                logger.log(`Waiting ${loginRetryDelay/1000} seconds before next login attempt...`, "LOGIN_RETRY");
+                await new Promise(resolve => setTimeout(resolve, loginRetryDelay));
+            }
+
+            api = await new Promise((resolve, reject) => {
+                login(loginData, fcaLoginOptions, (err, api) => {
+                    if (err) {
+                        // Handle specific Facebook login errors
+                        if (err.error === 'login-approval') {
+                            reject(new Error("Login approval needed. Please check your Facebook account for a login approval request."));
+                        } else if (err.error === 'Incorrect username/password.') {
+                            reject(new Error("Incorrect email or password. Please check your credentials."));
+                        } else if (err.error.includes('blocked') || err.error.includes('temporarily unavailable')) {
+                            isBlocked = true;
+                            lastBlockCheck = Date.now();
+                            reject(new Error("Account appears to be blocked. Please visit facebook.com and check your account."));
+                        } else {
+                            reject(err);
+                        }
+                    } else {
+                        resolve(api);
+                    }
+                });
+            });
+
+            // Verify login was successful
+            if (api) {
+                // Check if we can actually make API calls
+                try {
+                    await api.getThreadList(1, null, ['INBOX']);
+                    loginSuccess = true;
+                    isBlocked = false; // Reset block status on successful login
+                    logger.log("Login successful!", "LOGIN_SUCCESS");
+                    break;
+                } catch (e) {
+                    // If we get here, the login appeared successful but API calls fail
+                    logger.err("Login appeared successful but API calls are failing", "LOGIN_VERIFY_ERROR");
+                    if (e.message.includes('blocked') || e.message.includes('temporarily unavailable')) {
+                        isBlocked = true;
+                        lastBlockCheck = Date.now();
+                        throw new Error("Account is blocked. Please check Facebook and verify your account.");
+                    }
+                    throw e;
+                }
+            }
         } catch (err) {
-            if (loginAttempts >= 3) {
-                logger.err(`Max login attempts (3) reached.`, "LOGIN_FAILED");
+            logger.err(`Login attempt ${attempt} failed: ${err.message}`, "LOGIN_FAILED");
+            
+            if (attempt === maxLoginAttempts) {
+                logger.err("Maximum login attempts reached. Please check your account and try again later.", "LOGIN_FAILED");
+                
+                // Notify admin if configured
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
                     try {
+                        // Would send notification here if API was available
                         logger.log(`Would notify admin about login failure`, "LOGIN_NOTIFY");
                     } catch (e) {
                         logger.err(`Failed to send login failure notification: ${e.message}`, "LOGIN_NOTIFY_ERROR");
                     }
                 }
+                
+                // Exit if we can't login
                 process.exit(1);
             }
         }
     }
 
+    if (!loginSuccess) {
+        logger.err("Failed to login after multiple attempts", "LOGIN_FAILED");
+        process.exit(1);
+    }
+
+    // Save new appstate if available
     let newAppState;
     try {
         if (api.getAppState) {
@@ -1619,7 +1674,7 @@ async function onBot() {
             writeFileSync(appStateFile, d);
             logger.log("Appstate updated and saved successfully.", "APPSTATE_SAVE");
         } else {
-            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library. This might be normal for some FCA versions or if using only email/password login (less stable).", "APPSTATE_WARN");
+            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library.", "APPSTATE_WARN");
             if (loginData.appState) {
                 global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
             }
@@ -1632,9 +1687,8 @@ async function onBot() {
         global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
          global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
-    }
-    else {
-        logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
+    } else {
+        logger.warn("Could not set global.account.cookie. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
         global.account.cookie = "";
     }
 
