@@ -1,11 +1,10 @@
-const fs = require("fs-extra");
 const path = require('path');
 const { exec, spawn } = require("child_process");
 
 const defaultConfigContent = {
   "version": "1.0.1",
   "language": "en",
-  "email": "",
+  "email": "hassan3fca@gmail.com",
   "password": "sssaaa",
   "useEnvForCredentials": false,
   "envGuide": "When useEnvForCredentials enabled, it will use the process.env key provided for email and password, which helps hide your credentials, you can find env in render's environment tab, you can also find it in replit secrets.",
@@ -1077,21 +1076,14 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
-// Login stability variables
+// NEW: Login stability variables
 let loginAttempts = 0;
 let isLoggingIn = false;
 let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
 
-// Array of rotating user agents to prevent detection
-const USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
-];
-
-// Enhanced function to check if account is blocked
+// NEW: Function to check if account is blocked
 async function checkBlockStatus(api) {
     try {
         // Check if we've recently checked block status
@@ -1102,112 +1094,80 @@ async function checkBlockStatus(api) {
         lastBlockCheck = Date.now();
         
         // Try to perform an API call that would fail if blocked
-        try {
-            await api.getThreadList(1, null, ['INBOX']);
-            
-            // If we got this far, we're not blocked
-            if (isBlocked) {
-                logger.log("Account is no longer blocked", "BLOCK_STATUS");
-                isBlocked = false;
-            }
-            return false;
-        } catch (e) {
-            if (e.message.includes('blocked') || e.message.includes('restricted') || 
-                e.message.includes('temporarily unavailable')) {
-                if (!isBlocked) {
-                    logger.err("Account appears to be blocked by Facebook", "BLOCK_STATUS");
-                }
-                isBlocked = true;
-                return true;
-            }
-            throw e; // Re-throw other errors
+        const threadList = await api.getThreadList(1, null, ['INBOX']);
+        
+        // If we got this far, we're not blocked
+        if (isBlocked) {
+            logger.log("Account is no longer blocked", "BLOCK_STATUS");
+            isBlocked = false;
         }
+        return false;
     } catch (e) {
-        logger.err(`Error checking block status: ${e.message}`, "BLOCK_CHECK_ERROR");
+        if (e.message.includes('blocked') || e.message.includes('restricted') || 
+            e.message.includes('temporarily unavailable')) {
+            if (!isBlocked) {
+                logger.err("Account appears to be blocked by Facebook", "BLOCK_STATUS");
+            }
+            isBlocked = true;
+            return true;
+        }
+        // Other errors don't necessarily mean we're blocked
         return false;
     }
 }
 
-// Advanced login function with retry logic and block detection
+// NEW: Enhanced login function with retry logic and block detection
 async function performLogin(loginData, fcaLoginOptions) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 30000; // 30 seconds between retries
-    
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            logger.log(`Login attempt ${attempt}/${MAX_RETRIES}`, "LOGIN_ATTEMPT");
-            
-            // Check if we're already blocked before attempting
-            if (isBlocked && Date.now() - lastBlockCheck < 3600000) {
-                throw new Error("Account is blocked. Please visit facebook.com to unblock.");
-            }
-            
-            // Rotate user agent if credentials are being used
-            if (!loginData.appState) {
-                fcaLoginOptions.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-                logger.log(`Using user agent: ${fcaLoginOptions.userAgent}`, "LOGIN_UA");
-            }
-            
-            const api = await new Promise((resolve, reject) => {
-                login(loginData, fcaLoginOptions, (err, api) => {
-                    if (err) {
-                        // Handle specific Facebook errors
-                        if (err.error === 'login-approval') {
-                            reject(new Error("Login approval needed. Check your Facebook account for login approval."));
-                        } else if (err.error === 'Incorrect username/password.') {
-                            reject(new Error("Incorrect email or password."));
-                        } else if (err.error.includes('blocked') || err.error.includes('restricted') || 
-                                   err.error.includes('temporarily unavailable')) {
-                            isBlocked = true;
-                            lastBlockCheck = Date.now();
-                            reject(new Error("Account blocked. Please visit facebook.com to verify your account."));
-                        } else if (err.error.includes('error retrieving userID') || err.error.includes('from an unknown location')) {
-                            reject(new Error("Facebook blocked login from unknown location. Log in via browser first."));
-                        } else {
-                            reject(err);
-                        }
-                    } else {
-                        resolve(api);
-                    }
-                });
-            });
-            
-            // Verify the login was actually successful
-            if (api) {
-                try {
-                    await api.getThreadList(1, null, ['INBOX']);
-                    logger.log("Login successful!", "LOGIN_SUCCESS");
-                    isBlocked = false; // Reset block status
-                    loginAttempts = 0; // Reset attempt counter
-                    return api;
-                } catch (e) {
-                    // If API calls fail immediately after login, we might be blocked
-                    if (e.message.includes('blocked') || e.message.includes('temporarily unavailable')) {
-                        isBlocked = true;
-                        lastBlockCheck = Date.now();
-                        throw new Error("Account appears blocked after login. Please check facebook.com");
-                    }
-                    throw e;
-                }
-            }
-        } catch (err) {
-            logger.err(`Login attempt ${attempt} failed: ${err.message}`, "LOGIN_FAILED");
-            
-            // If we get blocked, don't keep retrying
-            if (err.message.includes('blocked') || err.message.includes('temporarily unavailable')) {
-                isBlocked = true;
-                lastBlockCheck = Date.now();
-                throw err;
-            }
-            
-            // Wait before retrying (except on last attempt)
-            if (attempt < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            }
+    return new Promise((resolve, reject) => {
+        if (isLoggingIn) {
+            return reject(new Error("Login already in progress"));
         }
-    }
-    
-    throw new Error("Max login attempts reached. Please try again later.");
+
+        isLoggingIn = true;
+        loginAttempts++;
+        lastLoginAttempt = Date.now();
+
+        logger.log(`Attempting login (attempt ${loginAttempts}/3)`, "LOGIN_ATTEMPT");
+
+        // Add block status check before attempting login
+        if (isBlocked && Date.now() - lastBlockCheck < 3600000) { // 1 hour
+            isLoggingIn = false;
+            return reject(new Error("Account is blocked. Please check Facebook and verify your account."));
+        }
+
+        login(loginData, fcaLoginOptions, (err, api) => {
+            isLoggingIn = false;
+            
+            if (err) {
+                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
+                
+                // Detect block status from login error
+                if (err.error === 'The account is temporarily unavailable.' || 
+                    err.error.includes('blocked') || 
+                    err.error.includes('restricted')) {
+                    isBlocked = true;
+                    lastBlockCheck = Date.now();
+                    reject(new Error("Account is blocked. Please check Facebook and verify your account."));
+                } 
+                else if (err.error === 'login-approval' || err.error === 'Login approval needed') {
+                    reject(new Error("Login approval needed. Please approve the login from your Facebook account in a web browser."));
+                } 
+                else if (err.error === 'Incorrect username/password.') {
+                    reject(new Error("Incorrect email or password. Please check your credentials."));
+                }
+                else if (err.error.includes('error retrieving userID') || err.error.includes('from an unknown location')) {
+                    reject(new Error("Facebook login blocked from unknown location. Log into Facebook in a browser first."));
+                }
+                else {
+                    reject(err);
+                }
+            } else {
+                loginAttempts = 0; // Reset on success
+                isBlocked = false; // Reset block status on successful login
+                resolve(api);
+            }
+        });
+    });
 }
 
 const delayedLog = async (message) => {
@@ -1299,7 +1259,7 @@ global.client = {
     timeStart: Date.now(),
     lastActivityTime: Date.now(),
     nonPrefixCommands: new Set(),
-    isBlocked: () => isBlocked,
+    isBlocked: () => isBlocked, // Expose block status
     loadCommand: async function(commandFileName) {
         const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
         const fullPath = path.resolve(commandsPath, commandFileName);
@@ -1474,6 +1434,7 @@ for (const property in packageJson.dependencies) {
         logger.err(`Failed to load npm module: ${property} - ${e.message}. Please run 'npm install ${property}'.`, "MODULE_LOAD");
     }
 }
+// [Previous code remains the same until the getText function]
 
 global.getText = function (...args) {
     const langText = global.language;
@@ -1515,6 +1476,7 @@ global.getText = function (...args) {
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
 
+// [Rest of your code continues here...]
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
@@ -1599,31 +1561,104 @@ async function onBot() {
         ...global.config.FCAOption,
         forceLogin: global.config.FCAOption.forceLogin || false,
         listenEvents: global.config.FCAOption.listenEvents || true,
-        autoMarkDelivery: global.config.FCAOption.autoMarkDelivery || false, // Reduced activity
-        autoMarkRead: global.config.FCAOption.autoMarkRead || false,       // Reduced activity
+        autoMarkDelivery: global.config.FCAOption.autoMarkDelivery || true,
+        autoMarkRead: global.config.FCAOption.autoMarkRead || true,
         logLevel: global.config.FCAOption.logLevel || 'silent',
         selfListen: global.config.FCAOption.selfListen || false,
         online: global.config.FCAOption.online || true,
-        userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)], // Random user agent
+        userAgent: global.config.FCAOption.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         autoReconnect: global.config.FCAOption.autoReconnect || true,
         autoRestore: global.config.FCAOption.autoRestore || true,
         syncUp: global.config.FCAOption.syncUp || true,
-        delay: global.config.FCAOption.delay || 1000 // Slower response time
+        delay: global.config.FCAOption.delay || 500
     };
 
-    // Use the enhanced login function
+    // NEW: Enhanced login with retry logic and block detection
     let api;
-    try {
-        api = await performLogin(loginData, fcaLoginOptions);
-        global.client.api = api;
-    } catch (err) {
-        logger.err(`Fatal login error: ${err.message}`, "LOGIN_FATAL");
-        if (err.message.includes('blocked')) {
-            // Notify admin if configured
-            if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
-                logger.log(`Account is blocked. Admin should be notified.`, "BLOCK_NOTIFY");
+    let loginSuccess = false;
+    const maxLoginAttempts = 3;
+    const loginRetryDelay = 30000; // 30 seconds between attempts
+
+    for (let attempt = 1; attempt <= maxLoginAttempts; attempt++) {
+        try {
+            logger.log(`Attempting login (attempt ${attempt}/${maxLoginAttempts})`, "LOGIN_ATTEMPT");
+            
+            // Check if account is blocked before attempting login
+            if (isBlocked && Date.now() - lastBlockCheck < 3600000) {
+                throw new Error("Account is blocked. Please check Facebook and verify your account.");
+            }
+
+            // Add delay between retries (except first attempt)
+            if (attempt > 1) {
+                logger.log(`Waiting ${loginRetryDelay/1000} seconds before next login attempt...`, "LOGIN_RETRY");
+                await new Promise(resolve => setTimeout(resolve, loginRetryDelay));
+            }
+
+            api = await new Promise((resolve, reject) => {
+                login(loginData, fcaLoginOptions, (err, api) => {
+                    if (err) {
+                        // Handle specific Facebook login errors
+                        if (err.error === 'login-approval') {
+                            reject(new Error("Login approval needed. Please check your Facebook account for a login approval request."));
+                        } else if (err.error === 'Incorrect username/password.') {
+                            reject(new Error("Incorrect email or password. Please check your credentials."));
+                        } else if (err.error.includes('blocked') || err.error.includes('temporarily unavailable')) {
+                            isBlocked = true;
+                            lastBlockCheck = Date.now();
+                            reject(new Error("Account appears to be blocked. Please visit facebook.com and check your account."));
+                        } else {
+                            reject(err);
+                        }
+                    } else {
+                        resolve(api);
+                    }
+                });
+            });
+
+            // Verify login was successful
+            if (api) {
+                // Check if we can actually make API calls
+                try {
+                    await api.getThreadList(1, null, ['INBOX']);
+                    loginSuccess = true;
+                    isBlocked = false; // Reset block status on successful login
+                    logger.log("Login successful!", "LOGIN_SUCCESS");
+                    break;
+                } catch (e) {
+                    // If we get here, the login appeared successful but API calls fail
+                    logger.err("Login appeared successful but API calls are failing", "LOGIN_VERIFY_ERROR");
+                    if (e.message.includes('blocked') || e.message.includes('temporarily unavailable')) {
+                        isBlocked = true;
+                        lastBlockCheck = Date.now();
+                        throw new Error("Account is blocked. Please check Facebook and verify your account.");
+                    }
+                    throw e;
+                }
+            }
+        } catch (err) {
+            logger.err(`Login attempt ${attempt} failed: ${err.message}`, "LOGIN_FAILED");
+            
+            if (attempt === maxLoginAttempts) {
+                logger.err("Maximum login attempts reached. Please check your account and try again later.", "LOGIN_FAILED");
+                
+                // Notify admin if configured
+                if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
+                    try {
+                        // Would send notification here if API was available
+                        logger.log(`Would notify admin about login failure`, "LOGIN_NOTIFY");
+                    } catch (e) {
+                        logger.err(`Failed to send login failure notification: ${e.message}`, "LOGIN_NOTIFY_ERROR");
+                    }
+                }
+                
+                // Exit if we can't login
+                process.exit(1);
             }
         }
+    }
+
+    if (!loginSuccess) {
+        logger.err("Failed to login after multiple attempts", "LOGIN_FAILED");
         process.exit(1);
     }
 
@@ -1656,6 +1691,8 @@ async function onBot() {
         logger.warn("Could not set global.account.cookie. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
         global.account.cookie = "";
     }
+
+    global.client.api = api;
 
     // Add periodic block status check
     setInterval(async () => {
