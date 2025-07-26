@@ -1,12 +1,13 @@
+const fs = require("fs-extra");
 const path = require('path');
 const { exec, spawn } = require("child_process");
 
 const defaultConfigContent = {
   "version": "1.0.1",
   "language": "en",
-  "email": "hassan3fca@gmail.com",
+  "emairejechassan3fca@gmail.com",
   "password": "sssaaa",
-  "useEnvForCredentials": false,
+  "useEnvForCredentials": true,
   "envGuide": "When useEnvForCredentials enabled, it will use the process.env key provided for email and password, which helps hide your credentials, you can find env in render's environment tab, you can also find it in replit secrets.",
   "DeveloperMode": true,
   "autoCreateDB": true,
@@ -43,8 +44,8 @@ const defaultConfigContent = {
   "FCAOption": {
     "forceLogin": false,
     "listenEvents": true,
-    "autoMarkDelivery": true,
-    "autoMarkRead": true,
+    "autoMarkDelivery": false,
+    "autoMarkRead": false,
     "logLevel": "silent",
     "selfListen": false,
     "online": true,
