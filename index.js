@@ -5,7 +5,7 @@ const { exec, spawn } = require("child_process");
 const defaultConfigContent = {
   "version": "1.0.1",
   "language": "en",
-  "email": "",  // Fixed: email is now properly part of the config object
+  "email": "hassan-fca@gmail.com",  // Fixed: email is now properly part of the config object
   "password": "sssaaa",
   "useEnvForCredentials": true,
   "envGuide": "When useEnvForCredentials enabled, it will use the process.env key provided for email and password, which helps hide your credentials, you can find env in render's environment tab, you can also find it in replit secrets.",
