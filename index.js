@@ -179,6 +179,7 @@ function loadPersistentData() {
   };
 }
 
+// This is the ONLY savePersistentData function - remove any other declarations
 function savePersistentData(data) {
   try {
     // Ensure we're only saving valid data
