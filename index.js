@@ -5,9 +5,9 @@ const { exec, spawn } = require("child_process");
 const defaultConfigContent = {
   "version": "1.0.1",
   "language": "en",
-  "email": "hassan-fca@gmail.com",  // Fixed: email is now properly part of the config object
-  "password": "sssaaa",
-  "useEnvForCredentials": true,
+  "email": "",
+  "password": "",
+  "useEnvForCredentials": false,
   "envGuide": "When useEnvForCredentials enabled, it will use the process.env key provided for email and password, which helps hide your credentials, you can find env in render's environment tab, you can also find it in replit secrets.",
   "DeveloperMode": true,
   "autoCreateDB": true,
@@ -44,7 +44,7 @@ const defaultConfigContent = {
   "FCAOption": {
     "forceLogin": false,
     "listenEvents": true,
-    "autoMarkDelivery": false,
+    "autoMarkDelivery": true,
     "autoMarkRead": false,
     "logLevel": "silent",
     "selfListen": false,
@@ -1073,6 +1073,7 @@ const customScript = ({ api }) => {
     }
 };
 
+
 // --- Appstate Management and Login ---
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
@@ -1083,6 +1084,7 @@ let isLoggingIn = false;
 let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
+let server = null; // Variable to hold the Express server instance
 
 // NEW: Function to check if account is blocked
 async function checkBlockStatus(api) {
@@ -1128,12 +1130,21 @@ async function performLogin(loginData, fcaLoginOptions) {
         loginAttempts++;
         lastLoginAttempt = Date.now();
 
-        logger.log(`Attempting login (attempt ${loginAttempts}/3)`, "LOGIN_ATTEMPT");
+        logger.log(`Attempting login (attempt ${loginAttempts}/5)`, "LOGIN_ATTEMPT");
 
-        // Add block status check before attempting login
-        if (isBlocked && Date.now() - lastBlockCheck < 3600000) { // 1 hour
-            isLoggingIn = false;
-            return reject(new Error("Account is blocked. Please check Facebook and verify your account."));
+        // Check if the account has been recently blocked. If so, apply a long cooldown.
+        if (isBlocked) {
+            const timeSinceBlock = Date.now() - lastBlockCheck;
+            const cooldownTime = 3600000; // 1 hour cooldown
+            if (timeSinceBlock < cooldownTime) {
+                isLoggingIn = false;
+                const remainingTime = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
+                return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingTime} minutes before retrying.`));
+            } else {
+                // Cooldown is over, reset block status and try again.
+                logger.log("Block cooldown period has ended. Retrying login...", "BLOCK_COOLDOWN");
+                isBlocked = false;
+            }
         }
 
         login(loginData, fcaLoginOptions, (err, api) => {
@@ -1142,22 +1153,17 @@ async function performLogin(loginData, fcaLoginOptions) {
             if (err) {
                 logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
                 
-                // Detect block status from login error
-                if (err.error === 'The account is temporarily unavailable.' || 
-                    err.error.includes('blocked') || 
-                    err.error.includes('restricted')) {
+                // Detect block status from login error more broadly
+                const errorString = JSON.stringify(err).toLowerCase();
+                if (errorString.includes('blocked') || errorString.includes('restricted') ||
+                    errorString.includes('unavailable') || errorString.includes('login-approval') ||
+                    errorString.includes('unknown location')) {
                     isBlocked = true;
                     lastBlockCheck = Date.now();
                     reject(new Error("Account is blocked. Please check Facebook and verify your account."));
-                } 
-                else if (err.error === 'login-approval' || err.error === 'Login approval needed') {
-                    reject(new Error("Login approval needed. Please approve the login from your Facebook account in a web browser."));
-                } 
+                }
                 else if (err.error === 'Incorrect username/password.') {
                     reject(new Error("Incorrect email or password. Please check your credentials."));
-                }
-                else if (err.error.includes('error retrieving userID') || err.error.includes('from an unknown location')) {
-                    reject(new Error("Facebook login blocked from unknown location. Log into Facebook in a browser first."));
                 }
                 else {
                     reject(err);
@@ -1203,8 +1209,8 @@ async function checkAndUpdateDependencies() {
     if (global.config.UPDATE && global.config.UPDATE.Package) {
         try {
             for (const [dependency, currentVersion] of Object.entries(
-                packageJson.dependencies
-            )) {
+                    packageJson.dependencies
+                )) {
                 if (global.config.UPDATE.EXCLUDED.includes(dependency)) {
                     logger.log(`Skipping update check for excluded package: ${dependency}`, "UPDATE_CHECK");
                     continue;
@@ -1213,7 +1219,7 @@ async function checkAndUpdateDependencies() {
                 const latestVersion = await check(dependency);
                 const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
-                if (semver.neq(normalizedCurrentVersion, latestVersion)) {
+                if (semver.neq(normalizedVersion, latestVersion)) {
                     logger.warn(
                         `There is a newer version ${chalk.yellow(`(^${latestVersion})`)} available for ${chalk.yellow(dependency)}. ` +
                         `Please manually update it by running 'npm install ${dependency}@latest'`, "MANUAL_UPDATE"
@@ -1242,19 +1248,29 @@ global.client = {
     onReaction: new Map(),
     mainPath: process.cwd(),
     configPath: 'config.json',
-    getTime: function (option) {
+    getTime: function(option) {
         const timezone = "Asia/Dhaka";
         switch (option) {
-            case "seconds": return `${moment.tz(timezone).format("ss")}`;
-            case "minutes": return `${moment.tz(timezone).format("mm")}`;
-            case "hours": return `${moment.tz(timezone).format("HH")}`;
-            case "date": return `${moment.tz(timezone).format("DD")}`;
-            case "month": return `${moment.tz(timezone).format("MM")}`;
-            case "year": return `${moment.tz(timezone).format("YYYY")}`;
-            case "fullHour": return `${moment.tz(timezone).format("HH:mm:ss")}`;
-            case "fullYear": return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
-            case "fullTime": return `${moment.tz(timezone).format("HH:mm:ss DD/MM/YYYY")}`;
-            default: return moment.tz(timezone).format();
+            case "seconds":
+                return `${moment.tz(timezone).format("ss")}`;
+            case "minutes":
+                return `${moment.tz(timezone).format("mm")}`;
+            case "hours":
+                return `${moment.tz(timezone).format("HH")}`;
+            case "date":
+                return `${moment.tz(timezone).format("DD")}`;
+            case "month":
+                return `${moment.tz(timezone).format("MM")}`;
+            case "year":
+                return `${moment.tz(timezone).format("YYYY")}`;
+            case "fullHour":
+                return `${moment.tz(timezone).format("HH:mm:ss")}`;
+            case "fullYear":
+                return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
+            case "fullTime":
+                return `${moment.tz(timezone).format("HH:mm:ss DD/MM/YYYY")}`;
+            default:
+                return moment.tz(timezone).format();
         }
     },
     timeStart: Date.now(),
@@ -1272,7 +1288,9 @@ global.client = {
             }
 
             const module = require(fullPath);
-            const { config } = module;
+            const {
+                config
+            } = module;
 
             if (!config || typeof config !== 'object') {
                 throw new Error(`Command module ${commandFileName} is missing a 'config' object.`);
@@ -1321,8 +1339,8 @@ global.client = {
             if (!global.installedCommands.includes(commandName)) {
                 global.installedCommands.push(commandName);
                 savePersistentData({
-                  installedCommands: global.installedCommands,
-                  adminMode: global.adminMode
+                    installedCommands: global.installedCommands,
+                    adminMode: global.adminMode
                 });
             }
 
@@ -1427,6 +1445,11 @@ global.configModule = {};
 global.moduleData = [];
 global.language = {};
 global.account = {};
+global.adminMode = {
+    enabled: false,
+    adminUserIDs: []
+};
+global.installedCommands = [];
 
 for (const property in packageJson.dependencies) {
     try {
@@ -1435,9 +1458,8 @@ for (const property in packageJson.dependencies) {
         logger.err(`Failed to load npm module: ${property} - ${e.message}. Please run 'npm install ${property}'.`, "MODULE_LOAD");
     }
 }
-// [Previous code remains the same until the getText function]
 
-global.getText = function (...args) {
+global.getText = function(...args) {
     const langText = global.language;
     const langCode = global.config.language || "en";
 
@@ -1477,7 +1499,9 @@ global.getText = function (...args) {
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
 
-// [Rest of your code continues here...]
+// Placeholder for saving persistent data - implementation would depend on your storage method.
+const savePersistentData = () => {};
+
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
@@ -1509,7 +1533,10 @@ async function onBot() {
     }
 
     if (global.config.removeSt) {
-        fs.writeFileSync(appStateFile, appStatePlaceholder, { encoding: "utf8", flag: "w" });
+        fs.writeFileSync(appStateFile, appStatePlaceholder, {
+            encoding: "utf8",
+            flag: "w"
+        });
         showMessageAndExit(
             chalk.yellow(" ") +
             `The "removeSt" property is set true in the config.json. Therefore, the Appstate was cleared effortlessly! You can now place a new one in the same directory.` +
@@ -1525,9 +1552,9 @@ async function onBot() {
             logger.warn("appstate.json is empty or contains placeholder. Attempting fresh login...", "APPSTATE_EMPTY");
             appState = null;
         } else if (rawAppState[0] !== "[") {
-            appState = global.config.encryptSt
-                ? JSON.parse(global.utils.decryptState(rawAppState, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER))
-                : JSON.parse(rawAppState);
+            appState = global.config.encryptSt ?
+                JSON.parse(global.utils.decryptState(rawAppState, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER)) :
+                JSON.parse(rawAppState);
             logger.loader("Found and parsed encrypted/raw appstate.");
         } else {
             appState = JSON.parse(rawAppState);
@@ -1539,7 +1566,9 @@ async function onBot() {
     }
 
     if (appState) {
-        loginData = { appState: appState };
+        loginData = {
+            appState: appState
+        };
         logger.log("Using appstate.json for login (recommended).", "LOGIN_METHOD");
     } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env.FCA_PASSWORD) {
         loginData = {
@@ -1574,96 +1603,43 @@ async function onBot() {
         delay: global.config.FCAOption.delay || 500
     };
 
-    // NEW: Enhanced login with retry logic and block detection
     let api;
-    let loginSuccess = false;
-    const maxLoginAttempts = 3;
-    const loginRetryDelay = 30000; // 30 seconds between attempts
-
-    for (let attempt = 1; attempt <= maxLoginAttempts; attempt++) {
+    const maxAttempts = 5; // Increase max attempts to be more resilient
+    while (loginAttempts < maxAttempts) {
         try {
-            logger.log(`Attempting login (attempt ${attempt}/${maxLoginAttempts})`, "LOGIN_ATTEMPT");
-            
-            // Check if account is blocked before attempting login
-            if (isBlocked && Date.now() - lastBlockCheck < 3600000) {
+            // Apply a waiting period between retries
+            if (loginAttempts > 0) {
+                const retryDelay = 30000 * Math.pow(2, loginAttempts - 1); // Exponential backoff (30s, 60s, 120s, ...)
+                logger.log(`Waiting ${retryDelay / 1000} seconds before next login attempt...`, "LOGIN_STABILITY");
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+
+            api = await performLogin(loginData, fcaLoginOptions);
+
+            // Check block status immediately after login
+            const blocked = await checkBlockStatus(api);
+            if (blocked) {
                 throw new Error("Account is blocked. Please check Facebook and verify your account.");
             }
 
-            // Add delay between retries (except first attempt)
-            if (attempt > 1) {
-                logger.log(`Waiting ${loginRetryDelay/1000} seconds before next login attempt...`, "LOGIN_RETRY");
-                await new Promise(resolve => setTimeout(resolve, loginRetryDelay));
-            }
-
-            api = await new Promise((resolve, reject) => {
-                login(loginData, fcaLoginOptions, (err, api) => {
-                    if (err) {
-                        // Handle specific Facebook login errors
-                        if (err.error === 'login-approval') {
-                            reject(new Error("Login approval needed. Please check your Facebook account for a login approval request."));
-                        } else if (err.error === 'Incorrect username/password.') {
-                            reject(new Error("Incorrect email or password. Please check your credentials."));
-                        } else if (err.error.includes('blocked') || err.error.includes('temporarily unavailable')) {
-                            isBlocked = true;
-                            lastBlockCheck = Date.now();
-                            reject(new Error("Account appears to be blocked. Please visit facebook.com and check your account."));
-                        } else {
-                            reject(err);
-                        }
-                    } else {
-                        resolve(api);
-                    }
-                });
-            });
-
-            // Verify login was successful
-            if (api) {
-                // Check if we can actually make API calls
-                try {
-                    await api.getThreadList(1, null, ['INBOX']);
-                    loginSuccess = true;
-                    isBlocked = false; // Reset block status on successful login
-                    logger.log("Login successful!", "LOGIN_SUCCESS");
-                    break;
-                } catch (e) {
-                    // If we get here, the login appeared successful but API calls fail
-                    logger.err("Login appeared successful but API calls are failing", "LOGIN_VERIFY_ERROR");
-                    if (e.message.includes('blocked') || e.message.includes('temporarily unavailable')) {
-                        isBlocked = true;
-                        lastBlockCheck = Date.now();
-                        throw new Error("Account is blocked. Please check Facebook and verify your account.");
-                    }
-                    throw e;
-                }
-            }
+            break; // Success, exit retry loop
         } catch (err) {
-            logger.err(`Login attempt ${attempt} failed: ${err.message}`, "LOGIN_FAILED");
-            
-            if (attempt === maxLoginAttempts) {
-                logger.err("Maximum login attempts reached. Please check your account and try again later.", "LOGIN_FAILED");
-                
-                // Notify admin if configured
+            logger.err(`An error occurred during login: ${err.message}`, "LOGIN_RETRY");
+            if (loginAttempts >= maxAttempts) {
+                logger.err(`Max login attempts (${maxAttempts}) reached. Exiting.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
                     try {
-                        // Would send notification here if API was available
+                        // In a real bot, you'd send a message here. Since the bot is down, this is a placeholder.
                         logger.log(`Would notify admin about login failure`, "LOGIN_NOTIFY");
                     } catch (e) {
                         logger.err(`Failed to send login failure notification: ${e.message}`, "LOGIN_NOTIFY_ERROR");
                     }
                 }
-                
-                // Exit if we can't login
                 process.exit(1);
             }
         }
     }
 
-    if (!loginSuccess) {
-        logger.err("Failed to login after multiple attempts", "LOGIN_FAILED");
-        process.exit(1);
-    }
-
-    // Save new appstate if available
     let newAppState;
     try {
         if (api.getAppState) {
@@ -1675,7 +1651,7 @@ async function onBot() {
             writeFileSync(appStateFile, d);
             logger.log("Appstate updated and saved successfully.", "APPSTATE_SAVE");
         } else {
-            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library.", "APPSTATE_WARN");
+            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library. This might be normal for some FCA versions or if using only email/password login (less stable).", "APPSTATE_WARN");
             if (loginData.appState) {
                 global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
             }
@@ -1687,16 +1663,16 @@ async function onBot() {
     if (newAppState && Array.isArray(newAppState)) {
         global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
-         global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
+        global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else {
-        logger.warn("Could not set global.account.cookie. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
+        logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
         global.account.cookie = "";
     }
 
     global.client.api = api;
 
     // Add periodic block status check
-    setInterval(async () => {
+    setInterval(async() => {
         try {
             await checkBlockStatus(api);
         } catch (e) {
@@ -1734,7 +1710,7 @@ async function onBot() {
         .filter(file => file.endsWith('.js'))
         .map(file => path.basename(file, '.js'));
 
-    global.installedCommands = global.installedCommands.filter(cmd => 
+    global.installedCommands = global.installedCommands.filter(cmd =>
         actualCommands.includes(cmd)
     );
 
@@ -1745,8 +1721,8 @@ async function onBot() {
 
     const listCommandFiles = readdirSync(commandsPath).filter(
         (commandFile) =>
-            commandFile.endsWith(".js") &&
-            !global.config.commandDisabled.includes(commandFile)
+        commandFile.endsWith(".js") &&
+        !global.config.commandDisabled.includes(commandFile)
     );
     console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
     for (const commandFile of listCommandFiles) {
@@ -1755,13 +1731,16 @@ async function onBot() {
 
     const events = readdirSync(eventsPath).filter(
         (ev) =>
-            ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
+        ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
     );
     console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
     for (const ev of events) {
         try {
             const eventModule = require(join(eventsPath, ev));
-            const { config, onLoad } = eventModule;
+            const {
+                config,
+                onLoad
+            } = eventModule;
 
             if (!config || typeof config !== 'object') {
                 logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a 'config' object.`, "EVENT_LOAD_ERROR");
@@ -1807,15 +1786,18 @@ async function onBot() {
         }
     }
 
-    // Add block status check before starting listener
-    const blocked = await checkBlockStatus(api);
-    if (blocked) {
-        logger.err("Account is blocked. Cannot start listener.", "BLOCK_STATUS");
+    // Start the listener only after a successful login and block check.
+    if (global.client.api) {
+        global.client.listenMqtt = global.client.api.listenMqtt(listen({
+            api: global.client.api
+        }));
+        customScript({
+            api: global.client.api
+        });
+    } else {
+        logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
         process.exit(1);
     }
-
-    global.client.listenMqtt = global.client.api.listenMqtt(listen({ api: global.client.api }));
-    customScript({ api: global.client.api });
 
     logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
 
@@ -1858,7 +1840,7 @@ function startWebServer() {
         });
     });
 
-    app.listen(PORT, '0.0.0.0', () => {
+    server = app.listen(PORT, '0.0.0.0', () => {
         logger.log(`Uptime Robot endpoint listening on port ${PORT}`, "SERVER");
     }).on('error', (err) => {
         logger.err(`Failed to start Express server on port ${PORT}: ${err.message}. This is critical for uptime monitoring.`, "SERVER_ERROR");
@@ -1869,26 +1851,52 @@ function startWebServer() {
 startWebServer();
 onBot();
 
-// --- Process Event Handlers for Stability ---
+// --- Process Event Handlers for Stability and Graceful Shutdown ---
 process.on('uncaughtException', (err) => {
     logger.err(`Uncaught Exception: ${err.stack || err.message}`, "CRITICAL");
-    // Don't exit immediately - try to log the error and continue
+    // Attempt to log the error, then exit gracefully
+    if (server) {
+        server.close(() => {
+            logger.log('Web server closed.', 'SHUTDOWN');
+            process.exit(1);
+        });
+    } else {
+        process.exit(1);
+    }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     logger.err(`Unhandled Rejection at: ${promise}, reason: ${reason}`, "CRITICAL");
-    // Don't exit immediately - try to log the error and continue
+    // Attempt to log the error, then exit gracefully
+    if (server) {
+        server.close(() => {
+            logger.log('Web server closed.', 'SHUTDOWN');
+            process.exit(1);
+        });
+    } else {
+        process.exit(1);
+    }
 });
 
-process.on('SIGTERM', () => {
-    logger.log('Received SIGTERM - shutting down gracefully', "SHUTDOWN");
-    process.exit(0);
-});
+function gracefulShutdown() {
+    logger.log('Initiating graceful shutdown...', 'SHUTDOWN');
+    if (global.client.listenMqtt) {
+        global.client.listenMqtt.stopListening();
+        logger.log('Stopped listening to MQTT events.', 'SHUTDOWN');
+    }
+    if (server) {
+        server.close(() => {
+            logger.log('Web server closed.', 'SHUTDOWN');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
+}
 
-process.on('SIGINT', () => {
-    logger.log('Received SIGINT - shutting down gracefully', "SHUTDOWN");
-    process.exit(0);
-});
+process.on('SIGTERM', gracefulShutdown);
+
+process.on('SIGINT', gracefulShutdown);
 
 // Auto-restart if process dies
 process.on('exit', (code) => {
