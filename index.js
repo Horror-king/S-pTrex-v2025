@@ -1500,9 +1500,6 @@ global.getText = function(...args) {
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
 
-// Placeholder for saving persistent data - implementation would depend on your storage method.
-const savePersistentData = () => {};
-
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
