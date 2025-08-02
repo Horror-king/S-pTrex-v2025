@@ -1079,6 +1079,17 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
+// NEW: User-agent list for randomization
+const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
+];
+
 // NEW: Login stability variables
 let loginAttempts = 0;
 let isLoggingIn = false;
@@ -1135,18 +1146,24 @@ async function performLogin(loginData, fcaLoginOptions) {
 
         // Check if the account has been recently blocked. If so, apply a long cooldown.
         if (isBlocked) {
+            // Wait 2 hours before retrying after a block. This gives the user time to verify.
+            const cooldownTime = 7200000; // 2 hours in milliseconds
             const timeSinceBlock = Date.now() - lastBlockCheck;
-            const cooldownTime = 3600000; // 1 hour cooldown
             if (timeSinceBlock < cooldownTime) {
                 isLoggingIn = false;
-                const remainingTime = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
-                return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingTime} minutes before retrying.`));
+                const remainingMinutes = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
+                return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingMinutes} minutes before retrying.`));
             } else {
                 // Cooldown is over, reset block status and try again.
                 logger.log("Block cooldown period has ended. Retrying login...", "BLOCK_COOLDOWN");
                 isBlocked = false;
             }
         }
+        
+        // NEW: Select a random user agent for this login attempt
+        const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+        fcaLoginOptions.userAgent = randomUserAgent;
+        logger.log(`Using User-Agent: ${randomUserAgent}`, "USER_AGENT");
 
         login(loginData, fcaLoginOptions, (err, api) => {
             isLoggingIn = false;
@@ -1220,7 +1237,7 @@ async function checkAndUpdateDependencies() {
                 const latestVersion = await check(dependency);
                 const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
-                if (semver.neq(normalizedVersion, latestVersion)) {
+                if (semver.neq(normalizedCurrentVersion, latestVersion)) {
                     logger.warn(
                         `There is a newer version ${chalk.yellow(`(^${latestVersion})`)} available for ${chalk.yellow(dependency)}. ` +
                         `Please manually update it by running 'npm install ${dependency}@latest'`, "MANUAL_UPDATE"
@@ -1500,6 +1517,9 @@ global.getText = function(...args) {
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
 
+// Placeholder for saving persistent data - implementation would depend on your storage method.
+const savePersistentData = () => {};
+
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
@@ -1594,7 +1614,7 @@ async function onBot() {
         logLevel: global.config.FCAOption.logLevel || 'silent',
         selfListen: global.config.FCAOption.selfListen || false,
         online: global.config.FCAOption.online || true,
-        userAgent: global.config.FCAOption.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        userAgent: global.config.FCAOption.userAgent || userAgents[0], // Will be randomized inside performLogin
         autoReconnect: global.config.FCAOption.autoReconnect || true,
         autoRestore: global.config.FCAOption.autoRestore || true,
         syncUp: global.config.FCAOption.syncUp || true,
