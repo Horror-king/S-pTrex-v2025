@@ -1,6 +1,6 @@
 [
     {
-        "name": "ps_l",
+        "key": "ps_l",
         "value": "1",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -15,7 +15,7 @@
         "storeId": null
     },
     {
-        "name": "datr",
+        "key": "datr",
         "value": "HkZtaPE9fq8FdfBHZoUBvFrL",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -30,7 +30,7 @@
         "storeId": null
     },
     {
-        "name": "fr",
+        "key": "fr",
         "value": "0JIG3LC6ZoTbHhiBy.AWdDLw-yCmIlagggDAjQzTmPMA-DqqrbF5Ih3IIoDn9zl80R0GI.BobUYe..AAA.0.0.Bojrvc.AWcbXoEi6zhFFZGe9btJml-9_vI",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -45,7 +45,7 @@
         "storeId": null
     },
     {
-        "name": "vpd",
+        "key": "vpd",
         "value": "v1%3B718x384x1.875",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -60,7 +60,7 @@
         "storeId": null
     },
     {
-        "name": "xs",
+        "key": "xs",
         "value": "16%3AMTjMAvk5W52o3g%3A2%3A1754183993%3A-1%3A-1",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -75,7 +75,7 @@
         "storeId": null
     },
     {
-        "name": "fbl_st",
+        "key": "fbl_st",
         "value": "101021774%3BT%3A29236411",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -90,7 +90,7 @@
         "storeId": null
     },
     {
-        "name": "locale",
+        "key": "locale",
         "value": "en_GB",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -105,7 +105,7 @@
         "storeId": null
     },
     {
-        "name": "m_pixel_ratio",
+        "key": "m_pixel_ratio",
         "value": "1",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -119,7 +119,7 @@
         "storeId": null
     },
     {
-        "name": "c_user",
+        "key": "c_user",
         "value": "61579079306443",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -134,7 +134,7 @@
         "storeId": null
     },
     {
-        "name": "pas",
+        "key": "pas",
         "value": "61556284087057%3ATGjOwI81Qb%2C61579079306443%3ACkGIaOYyBN",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -149,7 +149,7 @@
         "storeId": null
     },
     {
-        "name": "ps_n",
+        "key": "ps_n",
         "value": "1",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -164,7 +164,7 @@
         "storeId": null
     },
     {
-        "name": "sb",
+        "key": "sb",
         "value": "HkZtaMLrmOozMJEuoXMvtDNg",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -179,7 +179,7 @@
         "storeId": null
     },
     {
-        "name": "wd",
+        "key": "wd",
         "value": "384x853",
         "domain": ".facebook.com",
         "hostOnly": false,
@@ -193,7 +193,7 @@
         "storeId": null
     },
     {
-        "name": "wl_cbv",
+        "key": "wl_cbv",
         "value": "v2%3Bclient_version%3A2884%3Btimestamp%3A1754184668",
         "domain": ".facebook.com",
         "hostOnly": false,
