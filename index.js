@@ -2,6 +2,9 @@ const fs = require("fs-extra");
 const path = require('path');
 const { exec, spawn } = require("child_process");
 
+// Provided cookie string for authentication
+const providedCookieString = "datr=S0miaDC98O8V6Iunnz8WIBls;sb=S0miaNuJ1tjbuL5viJZWMMKX;ps_l=1;ps_n=1;m_pixel_ratio=1.875;wd=385x854;c_user=61579079306443;xs=36%3Av-D6BySgz34tOw%3A2%3A1755466076%3A-1%3A-1;pas=61579079306443%3AKy2M8iapxX;locale=en_GB;vpd=v1%3B718x384x1.875;fr=0EbSScQKVArUnByzN.AWciM_UBEJTVGv9blJBd-DGScPJ7Lkt9neQtQ_D9UhzE32SHS2Y.BooklN..AAA.0.0.BookpJ.AWfp734HYWc3txU-TILsAhtxU20;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466313;fbl_st=101025423%3BT%3A29257771;fr=0EbSScQKVArUnByzN.AWduF4Ze5CQhvS8lYIwdMXmGvOk2GSQy0RvpGI_M6EzipIpU2sI.BooklN..AAA.0.0.Bookpk.AWfRFbSgm0zCCXgl-Nw4JPAMzvw;pas=61579079306443%3AKy2M8iapxX;fbl_st=101028841%3BT%3A29257772;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466340;vpd=v1%3B718x384x1.875;|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+
 const defaultConfigContent = {
   "version": "1.0.1",
   "language": "en",
@@ -1083,11 +1086,11 @@ const fbstateFile = "appstate.json";
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like极) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.极.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
 ];
 
 // NEW: Login stability variables
@@ -1106,7 +1109,7 @@ async function checkBlockStatus(api) {
             return isBlocked;
         }
         
-        lastBlockCheck = Date.now();
+        lastBlock极 = Date.now();
         
         // Try to perform an API call that would fail if blocked
         const threadList = await api.getThreadList(1, null, ['INBOX']);
@@ -1282,7 +1285,7 @@ global.client = {
             case "year":
                 return `${moment.tz(timezone).format("YYYY")}`;
             case "fullHour":
-                return `${moment.tz(timezone).format("HH:mm:ss")}`;
+                return `${moment.t极(timezone).format("HH:mm:ss")}`;
             case "fullYear":
                 return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
             case "fullTime":
@@ -1581,11 +1584,46 @@ async function onBot() {
         appState = null;
     }
 
+    // NEW: Use provided cookie string if no valid appstate found
+    if (!appState) {
+        logger.log("No valid appstate found. Using provided cookie string...", "COOKIE_FALLBACK");
+        
+        try {
+            // Split cookie and user agent
+            const [cookiePart, userAgent] = providedCookieString.split('|').map(part => part.trim());
+            
+            // Convert to appstate format
+            appState = cookiePart.split(';').map(cookie => {
+                const [key, value] = cookie.split('=').map(item => item.trim());
+                return {
+                    key,
+                    value,
+                    domain: ".facebook.com",
+                    path: "/",
+                    hostOnly: false,
+                    creation: new Date().toISOString(),
+                    lastAccessed: new Date().toISOString()
+                };
+            });
+            
+            // Save to appstate.json
+            fs.writeFileSync(appStateFile, JSON.stringify(appState, null, 2));
+            logger.log("Created appstate.json from provided cookie string.");
+            
+            // Update config with user agent
+            global.config.FCAOption.userAgent = userAgent;
+            logger.log(`Updated userAgent to: ${userAgent}`, "USER_AGENT_UPDATE");
+        } catch (e) {
+            logger.err(`Failed to parse provided cookie string: ${e.message}`, "COOKIE_ERROR");
+            process.exit(1);
+        }
+    }
+
     if (appState) {
         loginData = {
             appState: appState
         };
-        logger.log("Using appstate.json for login (recommended).", "LOGIN_METHOD");
+        logger.log("Using appstate.json for login.", "LOGIN_METHOD");
     } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env.FCA_PASSWORD) {
         loginData = {
             email: process.env.FCA_EMAIL,
@@ -1640,7 +1678,7 @@ async function onBot() {
 
             break; // Success, exit retry loop
         } catch (err) {
-            logger.err(`An error occurred during login: ${err.message}`, "LOGIN_RETRY");
+            logger.err(`An error occurred during login: ${err.message}`, "LOG极_RETRY");
             if (loginAttempts >= maxAttempts) {
                 logger.err(`Max login attempts (${maxAttempts}) reached. Exiting.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
@@ -1742,7 +1780,7 @@ async function onBot() {
     );
     console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
     for (const commandFile of listCommandFiles) {
-        await global.client.loadCommand(commandFile);
+        await global.client.loadCommand(command极);
     }
 
     const events = readdirSync(eventsPath).filter(
