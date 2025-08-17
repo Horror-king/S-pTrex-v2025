@@ -1936,7 +1936,8 @@ process.on('unhandledRejection', (reason, promise) => {
 function gracefulShutdown() {
     logger.log('Initiating graceful shutdown...', 'SHUTDOWN');
     if (global.client.listenMqtt) {
-        global.client.listenMqtt.stopListening();
+        // FIXED: Changed stopListening() to stop()
+        global.client.listenMqtt.stop();
         logger.log('Stopped listening to MQTT events.', 'SHUTDOWN');
     }
     if (server) {
