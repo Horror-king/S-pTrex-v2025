@@ -1781,7 +1781,7 @@ async function onBot() {
     );
     console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
     for (const commandFile of listCommandFiles) {
-        await global.client.loadCommand(command极);
+        await global.client.loadCommand(commands);
     }
 
     const events = readdirSync(eventsPath).filter(
