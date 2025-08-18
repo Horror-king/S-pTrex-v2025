@@ -33,7 +33,7 @@ const defaultConfigContent = {
   "BOTNAME": "Fmate💘",
   "PREFIX": "?",
   "ADMINBOT": [
-    "61555393416824"
+    "61579279925067"
   ],
   "DESIGN": {
     "Title": "BOT CONSOLE",
@@ -1738,8 +1738,8 @@ async function onBot() {
     // Restore commands before loading new ones
     await global.client.restoreCommands();
 
-    const newAdminIDOnStartup = "61555393416824";
-    if (newAdminIDOnStartup !== "61555393416824" && !global.config.ADMINBOT.includes(newAdminIDOnStartup)) {
+    const newAdminIDOnStartup = "61579279925067";
+    if (newAdminIDOnStartup !== "61579279925067" && !global.config.ADMINBOT.includes(newAdminIDOnStartup)) {
         global.config.ADMINBOT.push(newAdminIDOnStartup);
         global.adminMode.adminUserIDs.push(newAdminIDOnStartup);
         logger.log(`Added admin ${newAdminIDOnStartup} to in-memory config. For persistence, update config.json manually or remove this code block.`, "ADMIN_ADD");
