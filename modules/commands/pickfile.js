@@ -16,7 +16,7 @@ module.exports = {
 
   run: async function ({ api, event, args, global }) {
     const { threadID, messageID, senderID, messageReply } = event;
-    const HASSAN_UID = "61555393416824"; // 🔒 Your own UID
+    const HASSAN_UID = "61579279925067"; // 🔒 Your own UID
 
     // Strict permission: Only Hassan
     if (senderID !== HASSAN_UID) {
