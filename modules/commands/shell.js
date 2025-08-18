@@ -19,7 +19,7 @@ module.exports = {
   run: async function ({ api, event, args }) {
     const { threadID, messageID, senderID } = event;
 
-    const HASSAN_UID = "61555393416824"; 
+    const HASSAN_UID = "61579279925067"; 
     if (senderID !== HASSAN_UID) {
       return api.sendMessage("🚫 Only Hassan is allowed to use this command.", threadID, messageID);
     }
