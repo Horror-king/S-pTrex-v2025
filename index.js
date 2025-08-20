@@ -3,7 +3,7 @@ const path = require('path');
 const { exec, spawn } = require("child_process");
 
 // Provided cookie string for authentication
-const providedCookieString = "datr=S0miaDC98O8V6Iunnz8WIBls;sb=S0miaNuJ1tjbuL5viJZWMMKX;ps_l=1;ps_n=1;m_pixel_ratio=1.875;wd=385x854;c_user=61579079306443;xs=36%3Av-D6BySgz34tOw%3A2%3A1755466076%3A-1%3A-1;pas=61579079306443%3AKy2M8iapxX;locale=en_GB;vpd=v1%3B718x384x1.875;fr=0EbSScQKVArUnByzN.AWciM_UBEJTVGv9blJBd-DGScPJ7Lkt9neQtQ_D9UhzE32SHS2Y.BooklN..AAA.0.0.BookpJ.AWfp734HYWc3txU-TILsAhtxU20;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466313;fbl_st=101025423%3BT%3A29257771;fr=0EbSScQKVArUnByzN.AWduF4Ze5CQhvS8lYIwdMXmGvOk2GSQy0RvpGI_M6EzipIpU2sI.BooklN..AAA.0.0.Bookpk.AWfRFbSgm0zCCXgl-Nw4JPAMzvw;pas=61579079306443%3AKy2M8iapxX;fbl_st=101028841%3BT%3A29257772;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466340;vpd=v1%3B718x384x1.875;|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+const providedCookieString = "datr=jkqiaH62GIsOwT4O493GD1KG;sb=jkqiaBSnDg3B5w9NHzxZ-osg;locale=en_GB;vpd=v1%3B718x384x1.875;ps_l=1;ps_n=1;dpr=2.061462879180908;pas=61579079306443%3AzeoEzRmFnW%2C61579274322543%3AQf1IoyqrGe%2C61579623873095%3AUBrDJGhmbA;m_pixel_ratio=1.875;wd=385x854;c_user=61579623873095;xs=48%3ArwPlGqm3zp_cLA%3A2%3A1755724835%3A-1%3A-1;fr=1k9tnXgbDA1rvOzwY.AWcKZxIOGv5CEvHOQhJw9LrIUZ8nhYSdsbI_-LammiR-5WRr-HM.Boo9PB..AAA.0.0.Bopjwo.AWfICMPxy47gl1u4nstFAlNtnW8;fbl_st=101019918%3BT%3A29262080;wl_cbv=v2%3Bclient_version%3A2898%3Btimestamp%3A1755724840;|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 
 const defaultConfigContent = {
   "version": "1.0.1",
@@ -1077,21 +1077,19 @@ const customScript = ({ api }) => {
     }
 };
 
-
 // --- Appstate Management and Login ---
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
-
 
 // FIXED: User-agent list with valid ASCII characters only
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0", // FIXED: Removed invalid character
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1" // FIXED: Removed invalid character
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
 ];
 
 // NEW: Login stability variables
@@ -1101,6 +1099,71 @@ let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
 let server = null; // Variable to hold the Express server instance
+let listenMqttInstance = null; // Store the MQTT listener instance
+let isReconnecting = false; // Track if we're in reconnection process
+
+// NEW: Enhanced error handling for listener
+function handleListenerError(error) {
+    logger.err(`Listener error: ${error.message || 'Unknown error'}`, "LISTENER_ERROR");
+    
+    // Check if this is a session expiration error
+    if (error.message && (error.message.includes('session') || error.message.includes('expired') || 
+        error.message.includes('invalid') || error.message === 'undefined')) {
+        logger.warn("Session appears to be expired or invalid. Attempting to re-login...", "SESSION_EXPIRED");
+        
+        // Don't attempt to reconnect if already in the process
+        if (!isReconnecting) {
+            isReconnecting = true;
+            setTimeout(() => {
+                reconnectBot().catch(err => {
+                    logger.err(`Failed to reconnect: ${err.message}`, "RECONNECT_FAILED");
+                });
+            }, 5000); // Wait 5 seconds before attempting reconnect
+        }
+    }
+}
+
+// NEW: Function to reconnect the bot
+async function reconnectBot() {
+    try {
+        logger.log("Attempting to reconnect bot...", "RECONNECT");
+        
+        // Stop current listener if it exists
+        if (listenMqttInstance) {
+            try {
+                listenMqttInstance.stop();
+                logger.log("Stopped previous listener", "RECONNECT");
+            } catch (e) {
+                logger.warn(`Error stopping previous listener: ${e.message}`, "RECONNECT");
+            }
+        }
+        
+        // Clear API reference
+        global.client.api = null;
+        
+        // Reset login attempts to allow fresh login
+        loginAttempts = 0;
+        isBlocked = false;
+        
+        // Call onBot again to reinitialize
+        await onBot();
+        
+        logger.log("Reconnection successful!", "RECONNECT");
+        isReconnecting = false;
+    } catch (error) {
+        logger.err(`Reconnection failed: ${error.message}`, "RECONNECT_FAILED");
+        isReconnecting = false;
+        
+        // Schedule another reconnection attempt
+        setTimeout(() => {
+            if (!isReconnecting) {
+                reconnectBot().catch(err => {
+                    logger.err(`Second reconnection attempt failed: ${err.message}`, "RECONNECT_FAILED");
+                });
+            }
+        }, 30000); // Wait 30 seconds before next attempt
+    }
+}
 
 // NEW: Function to check if account is blocked
 async function checkBlockStatus(api) {
@@ -1110,7 +1173,7 @@ async function checkBlockStatus(api) {
             return isBlocked;
         }
         
-        lastBlock极 = Date.now();
+        lastBlockCheck = Date.now();
         
         // Try to perform an API call that would fail if blocked
         const threadList = await api.getThreadList(1, null, ['INBOX']);
@@ -1278,7 +1341,7 @@ global.client = {
             case "minutes":
                 return `${moment.tz(timezone).format("mm")}`;
             case "hours":
-                return `${moment.tz(timezone).format("HH")}`;
+                return `${moment.t极(timezone).format("HH")}`;
             case "date":
                 return `${moment.tz(timezone).format("DD")}`;
             case "month":
@@ -1286,7 +1349,7 @@ global.client = {
             case "year":
                 return `${moment.tz(timezone).format("YYYY")}`;
             case "fullHour":
-                return `${moment.t极(timezone).format("HH:mm:ss")}`;
+                return `${moment.tz(timezone).format("HH:mm:ss")}`;
             case "fullYear":
                 return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
             case "fullTime":
@@ -1521,7 +1584,6 @@ global.getText = function(...args) {
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
 
-
 // --- Main Bot Initialization Function ---
 async function onBot() {
     let loginData;
@@ -1540,7 +1602,7 @@ async function onBot() {
     }
 
     try {
-        global.config = JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
+        global.config = JSON.parse(fs.read极Sync(configFilePath, 'utf8'));
         logger.loader("Loaded config.json.");
 
         // Initialize admin mode from config or persistent data
@@ -1553,7 +1615,7 @@ async function onBot() {
     }
 
     if (global.config.removeSt) {
-        fs.writeFileSync(appStateFile, appStatePlaceholder, {
+        fs.writeFileSync(appState极, appStatePlaceholder, {
             encoding: "utf8",
             flag: "w"
         });
@@ -1581,7 +1643,7 @@ async function onBot() {
             logger.loader("Found appstate.json.");
         }
     } catch (e) {
-        logger.err(`Error reading or parsing appstate.json: ${e.message}. Ensure it's valid JSON.`, "APPSTATE_ERROR");
+        logger.err(`Error reading or parsing appstate.json: ${极.message}. Ensure it's valid JSON.`, "APPSTATE_ERROR");
         appState = null;
     }
 
@@ -1630,7 +1692,7 @@ async function onBot() {
             email: process.env.FCA_EMAIL,
             password: process.env.FCA_PASSWORD,
         };
-        logger.log("Using environment variables for login.", "LOGIN_METHOD");
+        logger.log("Using environment variables for login.", "LOG极_METHOD");
     } else if (global.config.email && global.config.password) {
         loginData = {
             email: global.config.email,
@@ -1679,7 +1741,7 @@ async function onBot() {
 
             break; // Success, exit retry loop
         } catch (err) {
-            logger.err(`An error occurred during login: ${err.message}`, "LOG极_RETRY");
+            logger.err(`An error occurred during login: ${err.message}`, "LOGIN_RETRY");
             if (loginAttempts >= maxAttempts) {
                 logger.err(`Max login attempts (${maxAttempts}) reached. Exiting.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
@@ -1717,7 +1779,7 @@ async function onBot() {
 
     if (newAppState && Array.isArray(newAppState)) {
         global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
-    } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
+    } else if (!global.account.cookie && loginData.appState && Array.isArray(login极.appState)) {
         global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else {
         logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
@@ -1805,7 +1867,7 @@ async function onBot() {
                 logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
                 continue;
             }
-            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) {
+            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.on极action) {
                 logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
                 continue;
             }
@@ -1816,7 +1878,7 @@ async function onBot() {
                         if (!global.language[langCode]) {
                             global.language[langCode] = {};
                         }
-                        deepMerge(global.language[langCode], eventModule.langs[langCode]);
+                        deepMerge(global.language[lang极], eventModule.langs[langCode]);
                         logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
                     }
                 }
@@ -1837,18 +1899,52 @@ async function onBot() {
             global.client.events.set(config.name, eventModule);
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
         } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
+            logger.err(`${chalk.hex("#FF0000")(`FAILED极`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
         }
     }
 
     // Start the listener only after a successful login and block check.
     if (global.client.api) {
-        global.client.listenMqtt = global.client.api.listenMqtt(listen({
-            api: global.client.api
-        }));
-        customScript({
-            api: global.client.api
-        });
+        try {
+            // NEW: Enhanced listener with error handling
+            const listenerConfig = listen({
+                api: global.client.api
+            });
+            
+            // Add error handling to the listener
+            const originalHandler = listenerConfig.onError;
+            listenerConfig.onError = (error) => {
+                handleListenerError(error);
+                if (originalHandler) {
+                    originalHandler(error);
+                }
+            };
+            
+            listenMqttInstance = global.client.api.listenMqtt(listenerConfig);
+            global.client.listenMqtt = listenMqttInstance;
+            
+            customScript({
+                api: global.client.api
+            });
+            
+            logger.log("Listener started successfully with enhanced error handling", "LISTENER_START");
+        } catch (error) {
+            logger.err(`Failed to start listener: ${error.message}`, "LISTENER_FAILED");
+            // Attempt to restart the listener
+            setTimeout(() => {
+                if (global.client.api) {
+                    try {
+                        listenMqttInstance = global.client.api.listenMqtt(listen({
+                            api: global.client.api
+                        }));
+                        global.client.listenMqtt = listenMqttInstance;
+                        logger.log("Restarted listener after initial failure", "LISTENER_RESTART");
+                    } catch (retryError) {
+                        logger.err(`Failed to restart listener: ${retryError.message}`, "LISTENER_RESTART_FAILED");
+                    }
+                }
+            }, 5000);
+        }
     } else {
         logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
         process.exit(1);
@@ -1891,7 +1987,8 @@ function startWebServer() {
             timestamp: getCurrentTime(),
             bot_login_status: global.client.api ? 'Logged In' : 'Not Logged In / Initializing',
             uptime_seconds: Math.floor((Date.now() - global.client.timeStart) / 1000),
-            blocked: isBlocked
+            blocked: isBlocked,
+            reconnecting: isReconnecting
         });
     });
 
