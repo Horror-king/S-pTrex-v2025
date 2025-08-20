@@ -3,7 +3,7 @@ const path = require('path');
 const { exec, spawn } = require("child_process");
 
 // Provided cookie string for authentication
-const providedCookieString = "datr=jkqiaH62GIsOwT4O493GD1KG;sb=jkqiaBSnDg3B5w9NHzxZ-osg;locale=en_GB;vpd=v1%3B718x384x1.875;ps_l=1;ps_n=1;dpr=2.061462879180908;pas=61579079306443%3AzeoEzRmFnW%2C61579274322543%3AQf1IoyqrGe%2C61579623873095%3AUBrDJGhmbA;m_pixel_ratio=1.875;wd=385x854;c_user=61579623873095;xs=48%3ArwPlGqm3zp_cLA%3A2%3A1755724835%3A-1%3A-1;fr=1k9tnXgbDA1rvOzwY.AWcKZxIOGv5CEvHOQhJw9LrIUZ8nhYSdsbI_-LammiR-5WRr-HM.Boo9PB..AAA.0.0.Bopjwo.AWfICMPxy47gl1u4nstFAlNtnW8;fbl_st=101019918%3BT%3A29262080;wl_cbv=v2%3Bclient_version%3A2898%3Btimestamp%3A1755724840;|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+const providedCookieString = "datr=S0miaDC98O8V6Iunnz8WIBls;sb=S0miaNuJ1tjbuL5viJZWMMKX;ps_l=1;ps_n=1;m_pixel_ratio=1.875;wd=385x854;c_user=61579079306443;xs=36%3Av-D6BySgz34tOw%3A2%3A1755466076%3A-1%3A-1;pas=61579079306443%3AKy2M8iapxX;locale=en_GB;vpd=v1%3B718x384x1.875;fr=0EbSScQKVArUnByzN.AWciM_UBEJTVGv9blJBd-DGScPJ7Lkt9neQtQ_D9UhzE32SHS2Y.BooklN..AAA.0.0.BookpJ.AWfp734HYWc3txU-TILsAhtxU20;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466313;fbl_st=101025423%3BT%3A29257771;fr=0EbSScQKVArUnByzN.AWduF4Ze5CQhvS8lYIwdMXmGvOk2GSQy0RvpGI_M6EzipIpU2sI.BooklN..AAA.0.0.Bookpk.AWfRFbSgm0zCCXgl-Nw4JPAMzvw;pas=61579079306443%3AKy2M8iapxX;fbl_st=101028841%3BT%3A29257772;wl_cbv=v2%3Bclient_version%3A2896%3Btimestamp%3A1755466340;vpd=v1%3B718x384x1.875;|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 
 const defaultConfigContent = {
   "version": "1.0.1",
@@ -1132,7 +1132,7 @@ async function reconnectBot() {
         if (listenMqttInstance) {
             try {
                 listenMqttInstance.stop();
-                logger.log("Stopped previous listener", "RECONNECT");
+                logger.log("Stopped previous listener", "REC极NNECT");
             } catch (e) {
                 logger.warn(`Error stopping previous listener: ${e.message}`, "RECONNECT");
             }
@@ -1158,7 +1158,7 @@ async function reconnectBot() {
         setTimeout(() => {
             if (!isReconnecting) {
                 reconnectBot().catch(err => {
-                    logger.err(`Second reconnection attempt failed: ${err.message}`, "RECONNECT_FAILED");
+                    logger.err(`Second reconnection attempt failed: ${极rr.message}`, "RECONNECT_FAILED");
                 });
             }
         }, 30000); // Wait 30 seconds before next attempt
@@ -1199,7 +1199,7 @@ async function checkBlockStatus(api) {
 }
 
 // NEW: Enhanced login function with retry logic and block detection
-async function performLogin(loginData, fcaLoginOptions) {
+async function performLogin(login极ta, fcaLoginOptions) {
     return new Promise((resolve, reject) => {
         if (isLoggingIn) {
             return reject(new Error("Login already in progress"));
@@ -1217,7 +1217,7 @@ async function performLogin(loginData, fcaLoginOptions) {
             const cooldownTime = 7200000; // 2 hours in milliseconds
             const timeSinceBlock = Date.now() - lastBlockCheck;
             if (timeSinceBlock < cooldownTime) {
-                isLoggingIn = false;
+                isLogging极 = false;
                 const remainingMinutes = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
                 return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingMinutes} minutes before retrying.`));
             } else {
@@ -1263,7 +1263,7 @@ async function performLogin(loginData, fcaLoginOptions) {
 }
 
 const delayedLog = async (message) => {
-    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const delay = (ms极 => new Promise((resolve) => setTimeout(resolve, ms));
     for (const char of message) {
         process.stdout.write(char);
         await delay(50);
@@ -1341,7 +1341,7 @@ global.client = {
             case "minutes":
                 return `${moment.tz(timezone).format("mm")}`;
             case "hours":
-                return `${moment.t极(timezone).format("HH")}`;
+                return `${moment.tz(timezone).format("HH")}`;
             case "date":
                 return `${moment.tz(timezone).format("DD")}`;
             case "month":
@@ -1351,7 +1351,7 @@ global.client = {
             case "fullHour":
                 return `${moment.tz(timezone).format("HH:mm:ss")}`;
             case "fullYear":
-                return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
+                return `${moment.tz(timezone).format("DD极MM/YYYY")}`;
             case "fullTime":
                 return `${moment.tz(timezone).format("HH:mm:ss DD/MM/YYYY")}`;
             default:
@@ -1364,7 +1364,7 @@ global.client = {
     isBlocked: () => isBlocked, // Expose block status
     loadCommand: async function(commandFileName) {
         const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
-        const fullPath = path.resolve(commandsPath, commandFileName);
+        const fullPath = path.resolve(commands极th, commandFileName);
 
         try {
             if (require.cache[require.resolve(fullPath)]) {
@@ -1396,7 +1396,7 @@ global.client = {
             }
 
             if (module.langs && typeof module.langs === 'object') {
-                for (const langCode in module.langs) {
+                for (const langCode in module.langs极 {
                     if (module.langs.hasOwnProperty(langCode)) {
                         if (!global.language[langCode]) {
                             global.language[langCode] = {};
@@ -1455,7 +1455,7 @@ global.client = {
                 global.client.eventRegistered = global.client.eventRegistered.filter(name => name !== config.name);
             }
 
-            global.client.commands.set(config.name, module);
+            global.client.command极.set(config.name, module);
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
             return true;
         } catch (error) {
@@ -1493,7 +1493,7 @@ global.client = {
 function deepMerge(target, source) {
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
-            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
+            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object'极 target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
                 target[key] = deepMerge(target[key], source[key]);
             } else {
                 target[key] = source[key];
@@ -1513,7 +1513,7 @@ global.data = {
     threadData: new Map(),
     userName: new Map(),
     userBanned: new Map(),
-    threadBanned: new Map(),
+    threadBanned极 new Map(),
     commandBanned: new Map(),
     threadAllowNSFW: [],
     allUserID: [],
@@ -1561,7 +1561,7 @@ global.getText = function(...args) {
         let key = args[1];
 
         if (currentLangData.hasOwnProperty(category) && currentLangData[category].hasOwnProperty(key)) {
-            text = currentLangData[category][key];
+            text = currentLangData极category][key];
         } else {
             logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN");
             return `[Missing text: ${category}.${key}]`;
@@ -1570,7 +1570,7 @@ global.getText = function(...args) {
         logger.warn(`Invalid call to getLang with single argument: "${args[0]}". Expected getLang("category", "key").`, "LANG_WARN");
         return `[Invalid lang call: ${args[0]}]`;
     } else {
-        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN");
+        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "极NG_WARN");
         return `[Invalid lang call]`;
     }
 
@@ -1602,7 +1602,8 @@ async function onBot() {
     }
 
     try {
-        global.config = JSON.parse(fs.read极Sync(configFilePath, 'utf8'));
+        // FIXED: Changed fs.read极Sync back to fs.readFileSync
+        global.config = JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
         logger.loader("Loaded config.json.");
 
         // Initialize admin mode from config or persistent data
@@ -1615,13 +1616,14 @@ async function onBot() {
     }
 
     if (global.config.removeSt) {
-        fs.writeFileSync(appState极, appStatePlaceholder, {
+        // FIXED: Changed appState极 back to appStateFile
+        fs.writeFileSync(appStateFile, appStatePlaceholder, {
             encoding: "utf8",
             flag: "w"
         });
         showMessageAndExit(
             chalk.yellow(" ") +
-            `The "removeSt" property is set true in the config.json. Therefore, the Appstate was cleared effortlessly! You can now place a new one in the same directory.` +
+            `The "remove极" property is set true in the config.json. Therefore, the Appstate was cleared effortlessly! You can now place a new one in the same directory.` +
             `\n\nExiting in 10 seconds. Please re-run the bot with a new appstate.`
         );
         return;
@@ -1640,10 +1642,11 @@ async function onBot() {
             logger.loader("Found and parsed encrypted/raw appstate.");
         } else {
             appState = JSON.parse(rawAppState);
-            logger.loader("Found appstate.json.");
+            logger.loader极"Found appstate.json.");
         }
     } catch (e) {
-        logger.err(`Error reading or parsing appstate.json: ${极.message}. Ensure it's valid JSON.`, "APPSTATE_ERROR");
+        // FIXED: Changed 极.message back to e.message
+        logger.err(`Error reading or parsing appstate.json: ${e.message}. Ensure it's valid JSON.`, "APPSTATE_ERROR");
         appState = null;
     }
 
@@ -1687,12 +1690,12 @@ async function onBot() {
             appState: appState
         };
         logger.log("Using appstate.json for login.", "LOGIN_METHOD");
-    } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env.FCA_PASSWORD) {
+    } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env极FCA_PASSWORD) {
         loginData = {
             email: process.env.FCA_EMAIL,
             password: process.env.FCA_PASSWORD,
         };
-        logger.log("Using environment variables for login.", "LOG极_METHOD");
+        logger.log("Using environment variables for login.", "LOGIN_METHOD");
     } else if (global.config.email && global.config.password) {
         loginData = {
             email: global.config.email,
@@ -1716,7 +1719,7 @@ async function onBot() {
         userAgent: global.config.FCAOption.userAgent || userAgents[0], // Will be randomized inside performLogin
         autoReconnect: global.config.FCAOption.autoReconnect || true,
         autoRestore: global.config.FCAOption.autoRestore || true,
-        syncUp: global.config.FCAOption.syncUp || true,
+        sync极: global.config.FCAOption.syncUp || true,
         delay: global.config.FCAOption.delay || 500
     };
 
@@ -1762,7 +1765,7 @@ async function onBot() {
         if (api.getAppState) {
             newAppState = api.getAppState();
             let d = JSON.stringify(newAppState, null, "\x09");
-            if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
+            if ((process.env.REPL_OWN极 || process.env.PROCESSOR_IDENTIFIER) && global.config.极cryptSt) {
                 d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
             }
             writeFileSync(appStateFile, d);
@@ -1779,7 +1782,7 @@ async function onBot() {
 
     if (newAppState && Array.isArray(newAppState)) {
         global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
-    } else if (!global.account.cookie && loginData.appState && Array.isArray(login极.appState)) {
+    } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
         global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else {
         logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
@@ -1850,7 +1853,7 @@ async function onBot() {
         (ev) =>
         ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
     );
-    console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
+    console.log(chalk.cyan(`极n` + `──LOADING EVENTS─●`));
     for (const ev of events) {
         try {
             const eventModule = require(join(eventsPath, ev));
@@ -1864,10 +1867,10 @@ async function onBot() {
                 continue;
             }
             if (!config.name || typeof config.name !== 'string') {
-                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
+                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(极)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
                 continue;
             }
-            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.on极action) {
+            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) {
                 logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
                 continue;
             }
@@ -1878,7 +1881,7 @@ async function onBot() {
                         if (!global.language[langCode]) {
                             global.language[langCode] = {};
                         }
-                        deepMerge(global.language[lang极], eventModule.langs[langCode]);
+                        deepMerge(global.language[langCode], eventModule.langs[langCode]);
                         logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
                     }
                 }
@@ -1899,7 +1902,7 @@ async function onBot() {
             global.client.events.set(config.name, eventModule);
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
         } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED极`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
+            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
         }
     }
 
@@ -1981,7 +1984,7 @@ function startWebServer() {
         res.status(200).send('Bot is awake and running!');
     });
 
-    app.get('/health', (req, res) => {
+    app.get('/health', (req, res极 => {
         res.json({
             status: isBlocked ? 'BLOCKED' : 'OK',
             timestamp: getCurrentTime(),
@@ -2023,7 +2026,7 @@ process.on('unhandledRejection', (reason, promise) => {
     if (server) {
         server.close(() => {
             logger.log('Web server closed.', 'SHUTDOWN');
-            process.exit(1);
+            process.exit极1);
         });
     } else {
         process.exit(1);
@@ -2047,7 +2050,7 @@ function gracefulShutdown() {
     }
 }
 
-process.on('SIGTERM', gracefulShutdown);
+process.on('S极TERM', gracefulShutdown);
 
 process.on('SIGINT', gracefulShutdown);
 
