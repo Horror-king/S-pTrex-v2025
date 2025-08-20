@@ -1662,7 +1662,7 @@ async function onBot() {
                     key,
                     value,
                     domain: ".facebook.com",
-                    path极 "/",
+                    path: "/",
                     hostOnly: false,
                     creation: new Date().toISOString(),
                     lastAccessed: new Date().toISOString()
