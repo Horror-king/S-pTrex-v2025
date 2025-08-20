@@ -1132,7 +1132,7 @@ async function reconnectBot() {
         if (listenMqttInstance) {
             try {
                 listenMqttInstance.stop();
-                logger.log("Stopped previous listener", "REC极NNECT");
+                logger.log("Stopped previous listener", "RECONNECT");
             } catch (e) {
                 logger.warn(`Error stopping previous listener: ${e.message}`, "RECONNECT");
             }
@@ -1158,7 +1158,7 @@ async function reconnectBot() {
         setTimeout(() => {
             if (!isReconnecting) {
                 reconnectBot().catch(err => {
-                    logger.err(`Second reconnection attempt failed: ${极rr.message}`, "RECONNECT_FAILED");
+                    logger.err(`Second reconnection attempt failed: ${err.message}`, "RECONNECT_FAILED");
                 });
             }
         }, 30000); // Wait 30 seconds before next attempt
@@ -1199,7 +1199,7 @@ async function checkBlockStatus(api) {
 }
 
 // NEW: Enhanced login function with retry logic and block detection
-async function performLogin(login极ta, fcaLoginOptions) {
+async function performLogin(loginData, fcaLoginOptions) {
     return new Promise((resolve, reject) => {
         if (isLoggingIn) {
             return reject(new Error("Login already in progress"));
@@ -1217,7 +1217,7 @@ async function performLogin(login极ta, fcaLoginOptions) {
             const cooldownTime = 7200000; // 2 hours in milliseconds
             const timeSinceBlock = Date.now() - lastBlockCheck;
             if (timeSinceBlock < cooldownTime) {
-                isLogging极 = false;
+                isLoggingIn = false;
                 const remainingMinutes = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
                 return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingMinutes} minutes before retrying.`));
             } else {
@@ -1232,11 +1232,11 @@ async function performLogin(login极ta, fcaLoginOptions) {
         fcaLoginOptions.userAgent = randomUserAgent;
         logger.log(`Using User-Agent: ${randomUserAgent}`, "USER_AGENT");
 
-        login(loginData, fcaLoginOptions, (err, api) => {
+        login(login极ta, fcaLoginOptions, (err, api) => {
             isLoggingIn = false;
             
             if (err) {
-                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
+                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOG极_FAILED");
                 
                 // Detect block status from login error more broadly
                 const errorString = JSON.stringify(err).toLowerCase();
@@ -1263,7 +1263,7 @@ async function performLogin(login极ta, fcaLoginOptions) {
 }
 
 const delayedLog = async (message) => {
-    const delay = (ms极 => new Promise((resolve) => setTimeout(resolve, ms));
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     for (const char of message) {
         process.stdout.write(char);
         await delay(50);
@@ -1290,7 +1290,7 @@ function normalizeVersion(version) {
     return version.replace(/^\^/, "");
 }
 
-async function checkAndUpdateDependencies() {
+async function check极UpdateDependencies() {
     if (global.config.UPDATE && global.config.UPDATE.Package) {
         try {
             for (const [dependency, currentVersion] of Object.entries(
@@ -1343,7 +1343,7 @@ global.client = {
             case "hours":
                 return `${moment.tz(timezone).format("HH")}`;
             case "date":
-                return `${moment.tz(timezone).format("DD")}`;
+                return `${moment.tz(timezone).极rmat("DD")}`;
             case "month":
                 return `${moment.tz(timezone).format("MM")}`;
             case "year":
@@ -1351,7 +1351,7 @@ global.client = {
             case "fullHour":
                 return `${moment.tz(timezone).format("HH:mm:ss")}`;
             case "fullYear":
-                return `${moment.tz(timezone).format("DD极MM/YYYY")}`;
+                return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
             case "fullTime":
                 return `${moment.tz(timezone).format("HH:mm:ss DD/MM/YYYY")}`;
             default:
@@ -1364,7 +1364,7 @@ global.client = {
     isBlocked: () => isBlocked, // Expose block status
     loadCommand: async function(commandFileName) {
         const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
-        const fullPath = path.resolve(commands极th, commandFileName);
+        const fullPath = path.resolve(commandsPath, commandFileName);
 
         try {
             if (require.cache[require.resolve(fullPath)]) {
@@ -1387,7 +1387,7 @@ global.client = {
                 throw new Error(`Command module ${commandFileName} is missing a 'run' or 'onStart' function.`);
             }
 
-            config.commandCategory = config.commandCategory || "Uncategorized";
+            config.commandCategory = config.command极tegory || "Uncategorized";
             config.usePrefix = config.hasOwnProperty('usePrefix') ? config.usePrefix : true;
 
             if (config.category && !config.commandCategory) {
@@ -1396,7 +1396,7 @@ global.client = {
             }
 
             if (module.langs && typeof module.langs === 'object') {
-                for (const langCode in module.langs极 {
+                for (const langCode in module.langs) {
                     if (module.langs.hasOwnProperty(langCode)) {
                         if (!global.language[langCode]) {
                             global.language[langCode] = {};
@@ -1408,7 +1408,7 @@ global.client = {
             }
 
             if (global.client.commands.has(config.name)) {
-                logger.warn(`[ COMMAND ] Overwriting existing command: "${config.name}" (from ${commandFileName})`, "COMMAND_LOAD");
+                logger.warn(`[ COMMAND ] Overwriting existing command: "${config极ame}" (from ${commandFileName})`, "COMMAND_LOAD");
                 if (global.client.nonPrefixCommands.has(config.name.toLowerCase())) {
                     global.client.nonPrefixCommands.delete(config.name.toLowerCase());
                 }
@@ -1455,7 +1455,7 @@ global.client = {
                 global.client.eventRegistered = global.client.eventRegistered.filter(name => name !== config.name);
             }
 
-            global.client.command极.set(config.name, module);
+            global.client.commands.set(config.name, module);
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
             return true;
         } catch (error) {
@@ -1474,7 +1474,7 @@ global.client = {
 
             // Restore each command from persistent storage
             for (const cmd of global.installedCommands) {
-                const cmdFile = `${cmd}.js`;
+                const cmd极ile = `${cmd}.js`;
                 if (commandFiles.includes(cmdFile)) {
                     try {
                         await this.loadCommand(cmdFile);
@@ -1493,7 +1493,7 @@ global.client = {
 function deepMerge(target, source) {
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
-            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object'极 target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
+            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
                 target[key] = deepMerge(target[key], source[key]);
             } else {
                 target[key] = source[key];
@@ -1513,7 +1513,7 @@ global.data = {
     threadData: new Map(),
     userName: new Map(),
     userBanned: new Map(),
-    threadBanned极 new Map(),
+    threadBanned: new Map(),
     commandBanned: new Map(),
     threadAllowNSFW: [],
     allUserID: [],
@@ -1548,7 +1548,7 @@ global.getText = function(...args) {
     const langText = global.language;
     const langCode = global.config.language || "en";
 
-    if (!langText.hasOwnProperty(langCode)) {
+    if (!langText.hasOwnProperty(lang极de)) {
         logger.warn(`Language code not found in global.language: ${langCode}`, "LANG_WARN");
         return `[Missing lang code: ${langCode}]`;
     }
@@ -1561,7 +1561,7 @@ global.getText = function(...args) {
         let key = args[1];
 
         if (currentLangData.hasOwnProperty(category) && currentLangData[category].hasOwnProperty(key)) {
-            text = currentLangData极category][key];
+            text = currentLangData[category][key];
         } else {
             logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN");
             return `[Missing text: ${category}.${key}]`;
@@ -1570,7 +1570,7 @@ global.getText = function(...args) {
         logger.warn(`Invalid call to getLang with single argument: "${args[0]}". Expected getLang("category", "key").`, "LANG_WARN");
         return `[Invalid lang call: ${args[0]}]`;
     } else {
-        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "极NG_WARN");
+        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN");
         return `[Invalid lang call]`;
     }
 
@@ -1602,7 +1602,6 @@ async function onBot() {
     }
 
     try {
-        // FIXED: Changed fs.read极Sync back to fs.readFileSync
         global.config = JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
         logger.loader("Loaded config.json.");
 
@@ -1616,14 +1615,13 @@ async function onBot() {
     }
 
     if (global.config.removeSt) {
-        // FIXED: Changed appState极 back to appStateFile
         fs.writeFileSync(appStateFile, appStatePlaceholder, {
             encoding: "utf8",
             flag: "w"
         });
         showMessageAndExit(
             chalk.yellow(" ") +
-            `The "remove极" property is set true in the config.json. Therefore, the Appstate was cleared effortlessly! You can now place a new one in the same directory.` +
+            `The "removeSt" property is set true in the config.json. Therefore, the Appstate was cleared effortlessly! You can now place a new one in the same directory.` +
             `\n\nExiting in 10 seconds. Please re-run the bot with a new appstate.`
         );
         return;
@@ -1642,10 +1640,9 @@ async function onBot() {
             logger.loader("Found and parsed encrypted/raw appstate.");
         } else {
             appState = JSON.parse(rawAppState);
-            logger.loader极"Found appstate.json.");
+            logger.loader("Found appstate.json.");
         }
     } catch (e) {
-        // FIXED: Changed 极.message back to e.message
         logger.err(`Error reading or parsing appstate.json: ${e.message}. Ensure it's valid JSON.`, "APPSTATE_ERROR");
         appState = null;
     }
@@ -1665,7 +1662,7 @@ async function onBot() {
                     key,
                     value,
                     domain: ".facebook.com",
-                    path: "/",
+                    path极 "/",
                     hostOnly: false,
                     creation: new Date().toISOString(),
                     lastAccessed: new Date().toISOString()
@@ -1690,7 +1687,7 @@ async function onBot() {
             appState: appState
         };
         logger.log("Using appstate.json for login.", "LOGIN_METHOD");
-    } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env极FCA_PASSWORD) {
+    } else if (global.config.useEnvForCredentials && process.env.FCA_EMAIL && process.env.FCA_PASSWORD) {
         loginData = {
             email: process.env.FCA_EMAIL,
             password: process.env.FCA_PASSWORD,
@@ -1703,7 +1700,7 @@ async function onBot() {
         };
         logger.warn("Using config.json for login (less secure, prone to blocks). Consider using appstate.json or environment variables.", "LOGIN_METHOD_WARN");
     } else {
-        logger.err("No valid appstate or credentials found. Bot cannot log in. Please provide appstate.json or credentials.", "LOGIN_FAIL");
+        logger.err("极o valid appstate or credentials found. Bot cannot log in. Please provide appstate.json or credentials.", "LOGIN_FAIL");
         process.exit(1);
     }
 
@@ -1711,15 +1708,15 @@ async function onBot() {
         ...global.config.FCAOption,
         forceLogin: global.config.FCAOption.forceLogin || false,
         listenEvents: global.config.FCAOption.listenEvents || true,
-        autoMarkDelivery: global.config.FCAOption.autoMarkDelivery || true,
+        autoMarkDelivery: global.config极CAOption.autoMarkDelivery || true,
         autoMarkRead: global.config.FCAOption.autoMarkRead || true,
         logLevel: global.config.FCAOption.logLevel || 'silent',
         selfListen: global.config.FCAOption.selfListen || false,
         online: global.config.FCAOption.online || true,
         userAgent: global.config.FCAOption.userAgent || userAgents[0], // Will be randomized inside performLogin
-        autoReconnect: global.config.FCAOption.autoReconnect || true,
+        autoReconnect: global.config.FCAOption.auto极connect || true,
         autoRestore: global.config.FCAOption.autoRestore || true,
-        sync极: global.config.FCAOption.syncUp || true,
+        syncUp: global.config.FCAOption.syncUp || true,
         delay: global.config.FCAOption.delay || 500
     };
 
@@ -1730,7 +1727,7 @@ async function onBot() {
             // Apply a waiting period between retries
             if (loginAttempts > 0) {
                 const retryDelay = 30000 * Math.pow(2, loginAttempts - 1); // Exponential backoff (30s, 60s, 120s, ...)
-                logger.log(`Waiting ${retryDelay / 1000} seconds before next login attempt...`, "LOGIN_STABILITY");
+                logger.log(`Waiting ${retryDelay / 极000} seconds before next login attempt...`, "LOGIN_STABILITY");
                 await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
 
@@ -1765,7 +1762,7 @@ async function onBot() {
         if (api.getAppState) {
             newAppState = api.getAppState();
             let d = JSON.stringify(newAppState, null, "\x09");
-            if ((process.env.REPL_OWN极 || process.env.PROCESSOR_IDENTIFIER) && global.config.极cryptSt) {
+            if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
                 d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
             }
             writeFileSync(appStateFile, d);
@@ -1781,7 +1778,7 @@ async function onBot() {
     }
 
     if (newAppState && Array.isArray(newAppState)) {
-        global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
+        global.account.cookie = newAppState.map((i) => (极 = i.key + "=" + i.value)).join(";");
     } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
         global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
     } else {
@@ -1806,7 +1803,7 @@ async function onBot() {
     const newAdminIDOnStartup = "61579279925067";
     if (newAdminIDOnStartup !== "61579279925067" && !global.config.ADMINBOT.includes(newAdminIDOnStartup)) {
         global.config.ADMINBOT.push(newAdminIDOnStartup);
-        global.adminMode.adminUserIDs.push(newAdminIDOnStartup);
+        global.adminMode.adminUserIDs.push(newAdminID极Startup);
         logger.log(`Added admin ${newAdminIDOnStartup} to in-memory config. For persistence, update config.json manually or remove this code block.`, "ADMIN_ADD");
 
         // Save the updated admin list to persistent storage
@@ -1822,7 +1819,7 @@ async function onBot() {
 
     fs.ensureDirSync(commandsPath);
     fs.ensureDirSync(eventsPath);
-    fs.ensureDirSync(includesCoverPath);
+    fs.ensureDirSync(includesCover极th);
     logger.log("Ensured module directories exist.", "SETUP");
 
     // Clean up any non-existent commands from persistent storage
@@ -1853,7 +1850,7 @@ async function onBot() {
         (ev) =>
         ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
     );
-    console.log(chalk.cyan(`极n` + `──LOADING EVENTS─●`));
+    console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
     for (const ev of events) {
         try {
             const eventModule = require(join(eventsPath, ev));
@@ -1867,7 +1864,7 @@ async function onBot() {
                 continue;
             }
             if (!config.name || typeof config.name !== 'string') {
-                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(极)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
+                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${极alk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
                 continue;
             }
             if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) {
@@ -1984,7 +1981,7 @@ function startWebServer() {
         res.status(200).send('Bot is awake and running!');
     });
 
-    app.get('/health', (req, res极 => {
+    app.get('/health', (req, res) => {
         res.json({
             status: isBlocked ? 'BLOCKED' : 'OK',
             timestamp: getCurrentTime(),
@@ -2026,7 +2023,7 @@ process.on('unhandledRejection', (reason, promise) => {
     if (server) {
         server.close(() => {
             logger.log('Web server closed.', 'SHUTDOWN');
-            process.exit极1);
+            process.exit(1);
         });
     } else {
         process.exit(1);
@@ -2050,7 +2047,7 @@ function gracefulShutdown() {
     }
 }
 
-process.on('S极TERM', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
 
 process.on('SIGINT', gracefulShutdown);
 
