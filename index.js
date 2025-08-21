@@ -53,7 +53,7 @@ const defaultConfigContent = {
     "selfListen": false,
     "online": true,
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "autoReconnect": false,
+    "autoReconnect": true,
     "autoRestore": true,
     "syncUp": true,
     "delay": 500
@@ -1077,20 +1077,20 @@ const customScript = ({ api }) => {
     }
 };
 
-
 // --- Appstate Management and Login ---
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
+
 
 // FIXED: User-agent list with valid ASCII characters only
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0", // FIXED: Removed invalid character
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1" // FIXED: Removed invalid character
 ];
 
 // NEW: Login stability variables
@@ -1100,71 +1100,6 @@ let lastLoginAttempt = 0;
 let isBlocked = false;
 let lastBlockCheck = 0;
 let server = null; // Variable to hold the Express server instance
-let listenMqttInstance = null; // Store the MQTT listener instance
-let isReconnecting = false; // Track if we're in reconnection process
-
-// NEW: Enhanced error handling for listener
-function handleListenerError(error) {
-    logger.err(`Listener error: ${error.message || 'Unknown error'}`, "LISTENER_ERROR");
-    
-    // Check if this is a session expiration error
-    if (error.message && (error.message.includes('session') || error.message.includes('expired') || 
-        error.message.includes('invalid') || error.message === 'undefined')) {
-        logger.warn("Session appears to be expired or invalid. Attempting to re-login...", "SESSION_EXPIRED");
-        
-        // Don't attempt to reconnect if already in the process
-        if (!isReconnecting) {
-            isReconnecting = true;
-            setTimeout(() => {
-                reconnectBot().catch(err => {
-                    logger.err(`Failed to reconnect: ${err.message}`, "RECONNECT_FAILED");
-                });
-            }, 5000); // Wait 5 seconds before attempting reconnect
-        }
-    }
-}
-
-// NEW: Function to reconnect the bot
-async function reconnectBot() {
-    try {
-        logger.log("Attempting to reconnect bot...", "RECONNECT");
-        
-        // Stop current listener if it exists
-        if (listenMqttInstance) {
-            try {
-                listenMqttInstance.stop();
-                logger.log("Stopped previous listener", "RECONNECT");
-            } catch (e) {
-                logger.warn(`Error stopping previous listener: ${e.message}`, "RECONNECT");
-            }
-        }
-        
-        // Clear API reference
-        global.client.api = null;
-        
-        // Reset login attempts to allow fresh login
-        loginAttempts = 0;
-        isBlocked = false;
-        
-        // Call onBot again to reinitialize
-        await onBot();
-        
-        logger.log("Reconnection successful!", "RECONNECT");
-        isReconnecting = false;
-    } catch (error) {
-        logger.err(`Reconnection failed: ${error.message}`, "RECONNECT_FAILED");
-        isReconnecting = false;
-        
-        // Schedule another reconnection attempt
-        setTimeout(() => {
-            if (!isReconnecting) {
-                reconnectBot().catch(err => {
-                    logger.err(`Second reconnection attempt failed: ${err.message}`, "RECONNECT_FAILED");
-                });
-            }
-        }, 30000); // Wait 30 seconds before next attempt
-    }
-}
 
 // NEW: Function to check if account is blocked
 async function checkBlockStatus(api) {
@@ -1174,7 +1109,7 @@ async function checkBlockStatus(api) {
             return isBlocked;
         }
         
-        lastBlockCheck = Date.now();
+        lastBlock极 = Date.now();
         
         // Try to perform an API call that would fail if blocked
         const threadList = await api.getThreadList(1, null, ['INBOX']);
@@ -1291,7 +1226,7 @@ function normalizeVersion(version) {
     return version.replace(/^\^/, "");
 }
 
-async function checkUpdateDependencies() {
+async function checkAndUpdateDependencies() {
     if (global.config.UPDATE && global.config.UPDATE.Package) {
         try {
             for (const [dependency, currentVersion] of Object.entries(
@@ -1350,7 +1285,7 @@ global.client = {
             case "year":
                 return `${moment.tz(timezone).format("YYYY")}`;
             case "fullHour":
-                return `${moment.tz(timezone).format("HH:mm:ss")}`;
+                return `${moment.t极(timezone).format("HH:mm:ss")}`;
             case "fullYear":
                 return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
             case "fullTime":
@@ -1452,7 +1387,7 @@ global.client = {
                 if (!global.client.eventRegistered.includes(config.name)) {
                     global.client.eventRegistered.push(config.name);
                 }
-            } else if (!module.onChat && !module.onReaction && global.client.event极istered.includes(config.name)) {
+            } else if (!module.onChat && !module.onReaction && global.client.eventRegistered.includes(config.name)) {
                 global.client.eventRegistered = global.client.eventRegistered.filter(name => name !== config.name);
             }
 
@@ -1494,7 +1429,7 @@ global.client = {
 function deepMerge(target, source) {
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
-            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key])极!ArrayOfNonIterable(target[key])) {
+            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
                 target[key] = deepMerge(target[key], source[key]);
             } else {
                 target[key] = source[key];
@@ -1539,7 +1474,7 @@ global.installedCommands = [];
 
 for (const property in packageJson.dependencies) {
     try {
-        global.nodemodule[property极 = require(property);
+        global.nodemodule[property] = require(property);
     } catch (e) {
         logger.err(`Failed to load npm module: ${property} - ${e.message}. Please run 'npm install ${property}'.`, "MODULE_LOAD");
     }
@@ -1571,7 +1506,7 @@ global.getText = function(...args) {
         logger.warn(`Invalid call to getLang with single argument: "${args[0]}". Expected getLang("category", "key").`, "LANG_WARN");
         return `[Invalid lang call: ${args[0]}]`;
     } else {
-        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "极ANG_WARN");
+        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN");
         return `[Invalid lang call]`;
     }
 
@@ -1584,6 +1519,7 @@ global.getText = function(...args) {
     }
     return `[Text retrieval failed for ${args[0]}.${args[1]}]`;
 };
+
 
 // --- Main Bot Initialization Function ---
 async function onBot() {
@@ -1611,7 +1547,7 @@ async function onBot() {
         global.adminMode.adminUserIDs = global.config.ADMINBOT || global.adminMode.adminUserIDs;
 
     } catch (e) {
-        logger.err(`Error parsing config.json: ${极.message}. Please check your config.json for syntax errors. Bot cannot start.`, "CONFIG_ERROR");
+        logger.err(`Error parsing config.json: ${e.message}. Please check your config.json for syntax errors. Bot cannot start.`, "CONFIG_ERROR");
         return process.exit(1);
     }
 
@@ -1742,7 +1678,7 @@ async function onBot() {
 
             break; // Success, exit retry loop
         } catch (err) {
-            logger.err(`An error occurred during login: ${err.message}`, "LOGIN_RETRY");
+            logger.err(`An error occurred during login: ${err.message}`, "LOG极_RETRY");
             if (loginAttempts >= maxAttempts) {
                 logger.err(`Max login attempts (${maxAttempts}) reached. Exiting.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
@@ -1763,7 +1699,7 @@ async function onBot() {
         if (api.getAppState) {
             newAppState = api.getAppState();
             let d = JSON.stringify(newAppState, null, "\x09");
-            if ((process.env.极EPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encrypt极) {
+            if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
                 d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
             }
             writeFileSync(appStateFile, d);
@@ -1898,7 +1834,7 @@ async function onBot() {
                 }
             }
             global.client.events.set(config.name, eventModule);
-            logger.log(`${chalk.hex("#00FF00")(`LOADED极)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
+            logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
         } catch (error) {
             logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
         }
@@ -1906,46 +1842,12 @@ async function onBot() {
 
     // Start the listener only after a successful login and block check.
     if (global.client.api) {
-        try {
-            // NEW: Enhanced listener with error handling
-            const listenerConfig = listen({
-                api: global.client.api
-            });
-            
-            // Add error handling to the listener
-            const originalHandler = listenerConfig.onError;
-            listenerConfig.onError = (error) => {
-                handleListenerError(error);
-                if (originalHandler) {
-                    originalHandler(error);
-                }
-            };
-            
-            listenMqttInstance = global.client.api.listenMqtt(listenerConfig);
-            global.client.listenMqtt = listenMqttInstance;
-            
-            customScript({
-                api: global.client.api
-            });
-            
-            logger.log("Listener started successfully with enhanced error handling", "LISTENER_START");
-        } catch (error) {
-            logger.err(`Failed to start listener: ${error.message}`, "LISTENER_FAILED");
-            // Attempt to restart the listener
-            setTimeout(() => {
-                if (global.client.api) {
-                    try {
-                        listenMqttInstance = global.client.api.listenMqtt(listen({
-                            api: global.client.api
-                        }));
-                        global.client.listenMqtt = listenMqttInstance;
-                        logger.log("Restarted listener after initial failure", "LISTENER_RESTART");
-                    } catch (retryError) {
-                        logger.err(`Failed to restart listener: ${retryError.message}`, "LISTENER_RESTART_FAILED");
-                    }
-                }
-            }, 5000);
-        }
+        global.client.listenMqtt = global.client.api.listenMqtt(listen({
+            api: global.client.api
+        }));
+        customScript({
+            api: global.client.api
+        });
     } else {
         logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
         process.exit(1);
@@ -1982,14 +1884,13 @@ function startWebServer() {
         res.status(200).send('Bot is awake and running!');
     });
 
-    app.get('/health', (req, res极) {
+    app.get('/health', (req, res) => {
         res.json({
             status: isBlocked ? 'BLOCKED' : 'OK',
             timestamp: getCurrentTime(),
             bot_login_status: global.client.api ? 'Logged In' : 'Not Logged In / Initializing',
             uptime_seconds: Math.floor((Date.now() - global.client.timeStart) / 1000),
-            blocked: isBlocked,
-            reconnecting: isReconnecting
+            blocked: isBlocked
         });
     });
 
