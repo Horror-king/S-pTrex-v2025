@@ -949,8 +949,8 @@ const listen = ({ api }) => {
                         if (runFunction) {
                             const info = {};
                             await runFunction({
-                                api, event,极 args, global, prompt: prefixedPrompt,
-                                threadsData: global.data.threads, getLang: global.getText, command极Name: command.config.name,
+                              api, event, args, global, prompt: prefixedPrompt,   
+                              threadsData: global.data.threads, getLang: global.getText, command极Name: command.config.name,
                                 message: {
                                     reply: async (msg, cb) => {
                                         await utils.humanDelay();
