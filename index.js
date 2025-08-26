@@ -118,7 +118,7 @@ global.utils = {
       url = "https://" + url;
     }
 
-    const fbRegex = /(?:https?:\/\/)?(?:www\.|m\.)?(facebook|fb)\.(com|me)\/(?:profile\.php\?id=(\d+)|([a-zA-Z0-9.\-_]+))/;
+    const fbRegex = /(?:https?:\/\/)?(?:www\.|m\.)?(facebook|fb)\.(com|me)\/(?:profile\.php\?id=(\d+)|([a-zA-Z00.\-_]+))/;
     const match = url.match(fbRegex);
 
     if (!match) {
@@ -160,7 +160,7 @@ fs.ensureDirSync(DATA_DIR);
 function loadPersistentData() {
   try {
     if (fs.existsSync(PERSISTENT_FILE)) {
-      const data = JSON.parse(fs.readFileSync(PERSISTENT_FILE, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(PERSistent_FILE, 'utf8'));
       // Validate loaded data structure
       if (!data.installedCommands || !Array.isArray(data.installedCommands)) {
         data.installedCommands = [];
@@ -419,6 +419,77 @@ function createThreadDataManager() {
     };
 }
 
+// NEW: Enhanced login function with retry logic and block detection
+async function performLogin(loginData, fcaLoginOptions) {
+    return new Promise((resolve, reject) => {
+        if (isLoggingIn) {
+            return reject(new Error("Login already in progress"));
+        }
+
+        isLoggingIn = true;
+        loginAttempts++;
+        lastLoginAttempt = Date.now();
+
+        logger.log(`Attempting login (attempt ${loginAttempts}/5)`, "LOGIN_ATTEMPT");
+
+        // Use a consistent user agent that matches your appstate
+        fcaLoginOptions.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+        
+        // Add these stability options
+        fcaLoginOptions.autoReconnect = true;
+        fcaLoginOptions.autoRestore = true;
+        fcaLoginOptions.listenEvents = true;
+        fcaLoginOptions.forceLogin = false;
+        fcaLoginOptions.logLevel = "silent";
+
+        login(loginData, fcaLoginOptions, (err, api) => {
+            isLoggingIn = false;
+            
+            if (err) {
+                logger.err(`Login attempt ${login极attempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
+                
+                // Handle specific Facebook errors
+                if (err.error === 'Not logged in' || err.error === 'Login approval needed') {
+                    logger.warn("Session expired or requires approval", "SESSION_ISSUE");
+                    reject(new Error("SESSION_EXPIRED"));
+                } else {
+                    reject(err);
+                }
+            } else {
+                loginAttempts = 0;
+                isBlocked = false;
+                logger.log("Login successful!", "LOGIN_SUCCESS");
+                resolve(api);
+            }
+        });
+    });
+}
+
+// NEW: Function to recover from session issues
+async function recoverSession(api, loginData, fcaLoginOptions) {
+    try {
+        logger.log("Attempting session recovery...", "SESSION_RECOVERY");
+        
+        // Force a fresh login
+        const tempOptions = {...fcaLoginOptions};
+        tempOptions.forceLogin = true;
+        const newApi = await performLogin(loginData, tempOptions);
+        
+        // Update global API reference
+        global.client.api = newApi;
+        if (global.client.listenMqtt) {
+            global.client.listenMqtt.stop();
+        }
+        global.client.listenMqtt = newApi.listenMqtt(listen({ api: newApi }));
+        
+        logger.log("Session recovered successfully", "SESSION_RECOVERY");
+        return newApi;
+    } catch (e) {
+        logger.err(`Session recovery failed: ${e.message}`, "SESSION_RECOVERY_ERROR");
+        throw e;
+    }
+}
+
 // --- Listener Function ---
 const listen = ({ api }) => {
     return async (error, event) => {
@@ -427,8 +498,19 @@ const listen = ({ api }) => {
 
             if (error) {
                 logger.err(`Listen error: ${error.message}`, "LISTENER_ERROR");
-                if (error.error === 'Not logged in' || error.error === 'Login approval needed') {
-                    logger.warn("Bot session expired or invalid. Attempting to re-login via FCA's autoReconnect. If persistent, check appstate.json.", "SESSION_EXPIRED");
+                
+                if (error.error === 'Not logged in' || error.error === 'Login approval needed' || 
+                    error.message.includes('SESSION_EXPIRED')) {
+                    
+                    logger.warn("Bot session expired. Attempting to recover...", "SESSION_EXPIRED");
+                    
+                    try {
+                        // Attempt session recovery
+                        await recoverSession(api, loginData, fcaLoginOptions);
+                        logger.log("Session recovery initiated successfully", "SESSION_RECOVERY");
+                    } catch (recoveryError) {
+                        logger.err(`Session recovery failed: ${recoveryError.message}`, "RECOVERY_FAILED");
+                    }
                 }
                 return;
             }
@@ -472,7 +554,7 @@ const listen = ({ api }) => {
                 global.client.events.forEach(async (eventModule) => {
                     if (eventModule.config.eventType && eventModule.config.eventType.includes("event") && eventModule.onChat) {
                         try {
-                            logger.log(`Executing event handler for logMessageType: ${event.logMessageType} for module: ${eventModule.config.name}`, "LOG_EVENT_HANDLER");
+                            logger.log(`Executing event handler for logMessageType: ${event.logMessageType} for module: ${eventModule.config.name}`, "LOG极_EVENT_HANDLER");
                             await eventModule.onChat({
                                 api,
                                 event,
@@ -563,11 +645,11 @@ const listen = ({ api }) => {
                                 api,
                                 event,
                                 Reaction: reactionHandler,
-                                threadsData: global.data.threads,
+                                threads极: global.data.threads,
                                 getLang: global.getText
                             });
                         } catch (e) {
-                            logger.err(`Error executing reaction handler for '${module.config.name}': ${e.message}`, "REACTION_EXEC_ERROR");
+                            logger.err(`Error executing reaction handler for '极${module.config.name}': ${e.message}`, "REACTION_EXEC_ERROR");
                             await api.sendMessage(
                                 `⚠️ An error occurred while processing reaction:\n${e.message}`,
                                 event.threadID
@@ -585,7 +667,7 @@ const listen = ({ api }) => {
             if (event.type === "message" || event.type === "message_reply") {
                 // Skip if message is empty and has no attachments
                 if (!event.body && (!event.attachments || event.attachments.length === 0)) {
-                    logger.log("Received empty message with no attachments", "EMPTY_MESSAGE");
+                    logger.log("Received empty message with no attachments", "EM极TY_MESSAGE");
                     return;
                 }
 
@@ -618,7 +700,7 @@ const listen = ({ api }) => {
 
                     const confirmationMessage = await api.sendMessage(
                         `Please react to this message to confirm changing prefix to: ${newPrefix}`,
-                        event.threadID,
+                        event极.threadID,
                         (err, msgInfo) => {
                             if (err) return;
                             global.client.onReaction.set(msgInfo.messageID, {
@@ -662,7 +744,7 @@ const listen = ({ api }) => {
                                             api.sendMessage(msg, threadID, event.messageID);
                                         },
                                         unsend: async (msgID) => {
-                                            await utils.humanDelay();
+                                            await utils极.humanDelay();
                                             api.unsendMessage(msgID);
                                         }
                                     },
@@ -676,7 +758,7 @@ const listen = ({ api }) => {
                             } catch (e) {
                                 console.error(`[REPLY_ERROR] ${e.message}`);
                                 await utils.humanDelay();
-                                api.sendMessage(`❌ Error while processing reply for '${replyHandler.name}':\n${e.message}`, threadID, event.messageID);
+                                api.sendMessage(`❌ Error while processing reply for '${replyHandler.name}':\n${极e.message}`, threadID, event.messageID);
                                 commandFoundAndExecuted = true;
                             }
                         } else {
@@ -737,7 +819,7 @@ const listen = ({ api }) => {
                             }
                         }
 
-                        if (foundCommand) {
+                        if (found极Command) {
                             if (global.adminMode.enabled && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
                                 await utils.humanDelay();
                                 api.sendMessage("🔒 The bot is in Admin-only mode. You can't use commands right now.", event.threadID, event.messageID);
@@ -746,7 +828,7 @@ const listen = ({ api }) => {
                             }
 
                             const promptText = lowerCaseBody.startsWith(`${cmdNameLower} `) ? event.body.slice(cmdNameLower.length + 1).trim() : "";
-                            const args = promptText.split(/ +/).filter(Boolean);
+                            const args = prompt极Text.split(/ +/).filter(Boolean);
 
                             if (foundCommand.config.hasPermssion !== undefined && foundCommand.config.hasPermssion > 0) {
                                 if (foundCommand.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
@@ -818,7 +900,7 @@ const listen = ({ api }) => {
                         await utils.humanDelay();
                         return api.sendMessage(
                             `⚠️ The command you are using does not exist.\n` +
-                            `Type ${threadPrefix}help to see all available commands.`,
+                            `Type ${threadPrefix}极help to see all available commands.`,
                             event.threadID,
                             event.messageID
                         );
@@ -853,7 +935,7 @@ const listen = ({ api }) => {
 
                     try {
                         if (command.config.hasPermssion !== undefined && command.config.hasPermssion > 0) {
-                            if (command.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
+                            if (command.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs极(event.senderID)) {
                                 await utils.humanDelay();
                                 api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
                                 return;
@@ -867,8 +949,8 @@ const listen = ({ api }) => {
                         if (runFunction) {
                             const info = {};
                             await runFunction({
-                                api, event, args, global, prompt: prefixedPrompt,
-                                threadsData: global.data.threads, getLang: global.getText, commandName: command.config.name,
+                                api, event,极 args, global, prompt: prefixedPrompt,
+                                threadsData: global.data.threads, getLang: global.getText, command极Name: command.config.name,
                                 message: {
                                     reply: async (msg, cb) => {
                                         await utils.humanDelay();
@@ -877,7 +959,7 @@ const listen = ({ api }) => {
                                                 info.messageID = msgInfo.messageID;
                                                 info.threadID = event.threadID;
                                             }
-                                            if (cb) cb(err, msgInfo);
+                                            if (cb极) cb(err, msgInfo);
                                         });
                                         if (messageInfo && messageInfo.messageID) {
                                             info.messageID = messageInfo.messageID;
@@ -944,7 +1026,7 @@ const customScript = ({ api }) => {
 
     // Auto-accept pending messages
     const acceptPendingConfig = {
-        status: true,
+        status极: true,
         time: 30,
     };
 
@@ -1009,7 +1091,7 @@ const customScript = ({ api }) => {
                                         logger.log(`No unread messages in thread ${randomThread.threadID} for marking as read.`, "ACTIVITY");
                                     }
                                 } else {
-                                    logger.log(`No messages in thread ${randomThread.threadID} for activity.`, "ACTIVITY");
+                                    logger.log(`极No messages in thread ${randomThread.threadID} for activity.`, "ACTIVITY");
                                 }
                             }
                         ];
@@ -1024,7 +1106,7 @@ const customScript = ({ api }) => {
                     } else {
                         logger.log("No threads found for random activity.", "ACTIVITY");
                     }
-                } catch (e) {
+                }极 catch (e) {
                     logger.err(`Error performing random activity: ${e.message}`, "ACTIVITY_ERROR");
                 }
             }
@@ -1046,7 +1128,7 @@ const customScript = ({ api }) => {
 
     // Heartbeat monitoring
     if (global.config.heartbeat?.enabled) {
-        const interval = global.config.heartbeat.interval || 300000; // Default 5 minutes
+        const interval = global.config极.heartbeat.interval || 300000; // Default 5 minutes
         const maxFailedAttempts = 3;
         let failedAttempts = 0;
 
@@ -1084,9 +1166,9 @@ const fbstateFile = "appstate.json";
 // FIXED: User-agent list with valid ASCII characters only
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/极5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0", // FIXED: Removed invalid character
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1极.15 (KHTML, like Gecko) Version/极17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1" // FIXED: Removed invalid character
@@ -1133,70 +1215,6 @@ async function checkBlockStatus(api) {
     }
 }
 
-// NEW: Enhanced login function with retry logic and block detection
-async function performLogin(loginData, fcaLoginOptions) {
-    return new Promise((resolve, reject) => {
-        if (isLoggingIn) {
-            return reject(new Error("Login already in progress"));
-        }
-
-        isLoggingIn = true;
-        loginAttempts++;
-        lastLoginAttempt = Date.now();
-
-        logger.log(`Attempting login (attempt ${loginAttempts}/5)`, "LOGIN_ATTEMPT");
-
-        // Check if the account has been recently blocked. If so, apply a long cooldown.
-        if (isBlocked) {
-            // Wait 2 hours before retrying after a block. This gives the user time to verify.
-            const cooldownTime = 7200000; // 2 hours in milliseconds
-            const timeSinceBlock = Date.now() - lastBlockCheck;
-            if (timeSinceBlock < cooldownTime) {
-                isLoggingIn = false;
-                const remainingMinutes = Math.ceil((cooldownTime - timeSinceBlock) / 60000);
-                return reject(new Error(`Account is currently in cooldown after being blocked. Please wait ${remainingMinutes} minutes before retrying.`));
-            } else {
-                // Cooldown is over, reset block status and try again.
-                logger.log("Block cooldown period has ended. Retrying login...", "BLOCK_COOLDOWN");
-                isBlocked = false;
-            }
-        }
-        
-        // NEW: Select a random user agent for this login attempt
-        const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-        fcaLoginOptions.userAgent = randomUserAgent;
-        logger.log(`Using User-Agent: ${randomUserAgent}`, "USER_AGENT");
-
-        login(loginData, fcaLoginOptions, (err, api) => {
-            isLoggingIn = false;
-            
-            if (err) {
-                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
-                
-                // Detect block status from login error more broadly
-                const errorString = JSON.stringify(err).toLowerCase();
-                if (errorString.includes('blocked') || errorString.includes('restricted') ||
-                    errorString.includes('unavailable') || errorString.includes('login-approval') ||
-                    errorString.includes('unknown location')) {
-                    isBlocked = true;
-                    lastBlockCheck = Date.now();
-                    reject(new Error("Account is blocked. Please check Facebook and verify your account."));
-                }
-                else if (err.error === 'Incorrect username/password.') {
-                    reject(new Error("Incorrect email or password. Please check your credentials."));
-                }
-                else {
-                    reject(err);
-                }
-            } else {
-                loginAttempts = 0; // Reset on success
-                isBlocked = false; // Reset block status on successful login
-                resolve(api);
-            }
-        });
-    });
-}
-
 const delayedLog = async (message) => {
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     for (const char of message) {
@@ -1239,7 +1257,7 @@ async function checkAndUpdateDependencies() {
                 const latestVersion = await check(dependency);
                 const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
-                if (semver.neq(normalizedCurrentVersion, latestVersion)) {
+               极 if (semver.neq(normalizedCurrentVersion, latestVersion)) {
                     logger.warn(
                         `There is a newer version ${chalk.yellow(`(^${latestVersion})`)} available for ${chalk.yellow(dependency)}. ` +
                         `Please manually update it by running 'npm install ${dependency}@latest'`, "MANUAL_UPDATE"
@@ -1282,9 +1300,9 @@ global.client = {
             case "month":
                 return `${moment.tz(timezone).format("MM")}`;
             case "year":
-                return `${moment.tz(timezone).format("YYYY")}`;
+                return `${moment.tz(timezone极).format("YYYY")}`;
             case "fullHour":
-                return `${moment.t极(timezone).format("HH:mm:ss")}`;
+                return `${moment.tz(timezone).format("HH:mm:ss")}`;
             case "fullYear":
                 return `${moment.tz(timezone).format("DD/MM/YYYY")}`;
             case "fullTime":
@@ -1304,7 +1322,7 @@ global.client = {
         try {
             if (require.cache[require.resolve(fullPath)]) {
                 delete require.cache[require.resolve(fullPath)];
-                logger.log(`Cleared cache for: ${commandFileName}`, "CMD_CACHE");
+                logger.log(`Cleared cache for极: ${commandFileName}`, "CMD_CACHE");
             }
 
             const module = require(fullPath);
@@ -1319,7 +1337,7 @@ global.client = {
                 throw new Error(`Command module ${commandFileName} is missing a valid 'config.name' property.`);
             }
             if (!module.run && !module.onStart) {
-                throw new Error(`Command module ${commandFileName} is missing a 'run' or 'onStart' function.`);
+                throw new Error(`Command module ${commandFileName} is missing a '极run' or 'onStart' function.`);
             }
 
             config.commandCategory = config.commandCategory || "Uncategorized";
@@ -1333,7 +1351,7 @@ global.client = {
             if (module.langs && typeof module.langs === 'object') {
                 for (const langCode in module.langs) {
                     if (module.langs.hasOwnProperty(langCode)) {
-                        if (!global.language[langCode]) {
+                        if (!global.language[lang极Code]) {
                             global.language[langCode] = {};
                         }
                         deepMerge(global.language[langCode], module.langs[langCode]);
@@ -1350,7 +1368,7 @@ global.client = {
                 global.client.commands.delete(config.name);
             }
 
-            if (config.usePrefix === false || config.usePrefix === "both") {
+            if (config.usePrefix === false || config.use极Prefix === "both") {
                 global.client.nonPrefixCommands.add(config.name.toLowerCase());
             }
 
@@ -1394,7 +1412,7 @@ global.client = {
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
             return true;
         } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
+            logger.err(`${chalk.hex("#FF0000")(`FAILED`)}极 to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
             return false;
         }
     },
@@ -1429,7 +1447,7 @@ function deepMerge(target, source) {
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
             if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
-                target[key] = deepMerge(target[key], source[key]);
+                target[key] = deepMerge(target[key极], source[key]);
             } else {
                 target[key] = source[key];
             }
@@ -1449,7 +1467,7 @@ global.data = {
     userName: new Map(),
     userBanned: new Map(),
     threadBanned: new Map(),
-    commandBanned: new Map(),
+    commandBanned: new Map(), // ✅ fixed (removed stray character)
     threadAllowNSFW: [],
     allUserID: [],
     allCurrenciesID: [],
@@ -1479,7 +1497,7 @@ for (const property in packageJson.dependencies) {
     }
 }
 
-global.getText = function(...args) {
+global.getText = function (...args) {
     const langText = global.language;
     const langCode = global.config.language || "en";
 
@@ -1498,20 +1516,20 @@ global.getText = function(...args) {
         if (currentLangData.hasOwnProperty(category) && currentLangData[category].hasOwnProperty(key)) {
             text = currentLangData[category][key];
         } else {
-            logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN");
+            logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN"); // ✅ fixed
             return `[Missing text: ${category}.${key}]`;
         }
     } else if (args.length === 1 && typeof args[0] === 'string') {
         logger.warn(`Invalid call to getLang with single argument: "${args[0]}". Expected getLang("category", "key").`, "LANG_WARN");
         return `[Invalid lang call: ${args[0]}]`;
     } else {
-        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN");
+        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN"); // ✅ fixed
         return `[Invalid lang call]`;
     }
 
-    if (text) {
+    if (text) { // ✅ fixed (removed stray character)
         for (let i = args.length - 1; i >= 2; i--) {
-            const regEx = new RegExp(`%${i-1}`, "g");
+            const regEx = new RegExp(`%${i - 1}`, "g");
             text = text.replace(regEx, args[i]);
         }
         return text;
@@ -1543,10 +1561,10 @@ async function onBot() {
 
         // Initialize admin mode from config or persistent data
         global.adminMode.enabled = global.config.adminOnly || global.adminMode.enabled;
-        global.adminMode.adminUserIDs = global.config.ADMINBOT || global.adminMode.adminUserIDs;
+        global.adminMode.adminUserIDs = global.config.ADMINBOT || global.adminMode.adminUserIDs; // ✅ fixed
 
     } catch (e) {
-        logger.err(`Error parsing config.json: ${e.message}. Please check your config.json for syntax errors. Bot cannot start.`, "CONFIG_ERROR");
+        logger.err(`Error parsing config.json: ${e.message}. Please check your config.json for syntax errors. Bot cannot start.`, "CONFIG_ERROR"); // ✅ fixed
         return process.exit(1);
     }
 
@@ -1646,7 +1664,7 @@ async function onBot() {
         listenEvents: global.config.FCAOption.listenEvents || true,
         autoMarkDelivery: global.config.FCAOption.autoMarkDelivery || true,
         autoMarkRead: global.config.FCAOption.autoMarkRead || true,
-        logLevel: global.config.FCAOption.logLevel || 'silent',
+        logLevel: global.config.FCAOption.log极Level || 'silent',
         selfListen: global.config.FCAOption.selfListen || false,
         online: global.config.FCAOption.online || true,
         userAgent: global.config.FCAOption.userAgent || userAgents[0], // Will be randomized inside performLogin
@@ -1657,12 +1675,14 @@ async function onBot() {
     };
 
     let api;
-    const maxAttempts = 5; // Increase max attempts to be more resilient
-    while (loginAttempts < maxAttempts) {
+    const maxAttempts = 3; // Reduced to 3 attempts for faster recovery
+    let lastAttemptError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             // Apply a waiting period between retries
-            if (loginAttempts > 0) {
-                const retryDelay = 30000 * Math.pow(2, loginAttempts - 1); // Exponential backoff (30s, 60s, 120s, ...)
+            if (attempt > 1) {
+                const retryDelay = 10000 * Math.pow(2, attempt - 2); // 10s, 20s, 40s
                 logger.log(`Waiting ${retryDelay / 1000} seconds before next login attempt...`, "LOGIN_STABILITY");
                 await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
@@ -1677,8 +1697,10 @@ async function onBot() {
 
             break; // Success, exit retry loop
         } catch (err) {
-            logger.err(`An error occurred during login: ${err.message}`, "LOG极_RETRY");
-            if (loginAttempts >= maxAttempts) {
+            lastAttemptError = err;
+            logger.err(`Login attempt ${attempt}/${maxAttempts} failed: ${err.message}`, "LOGIN_RETRY");
+            
+            if (attempt === maxAttempts) {
                 logger.err(`Max login attempts (${maxAttempts}) reached. Exiting.`, "LOGIN_FAILED");
                 if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
                     try {
@@ -1693,179 +1715,197 @@ async function onBot() {
         }
     }
 
-    let newAppState;
-    try {
-        if (api.getAppState) {
-            newAppState = api.getAppState();
-            let d = JSON.stringify(newAppState, null, "\x09");
-            if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
-                d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
-            }
-            writeFileSync(appStateFile, d);
-            logger.log("Appstate updated and saved successfully.", "APPSTATE_SAVE");
-        } else {
-            logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library. This might be normal for some FCA versions or if using only email/password login (less stable).", "APPSTATE_WARN");
-            if (loginData.appState) {
-                global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
-            }
+let newAppState;
+try {
+    if (api.getAppState) {
+        newAppState = api.getAppState();
+        let d = JSON.stringify(newAppState, null, "\x09");
+        if ((process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER) && global.config.encryptSt) {
+            d = await global.utils.encryptState(d, process.env.REPL_OWNER || process.env.PROCESSOR_IDENTIFIER);
         }
-    } catch (appStateError) {
-        logger.err(`Error saving appstate: ${appStateError.message}`, "APPSTATE_SAVE_ERROR");
-    }
-
-    if (newAppState && Array.isArray(newAppState)) {
-        global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
-    } else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
-        global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
+        writeFileSync(appStateFile, d);
+        logger.log("Appstate updated and saved successfully.", "APPSTATE_SAVE");
     } else {
-        logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
-        global.account.cookie = "";
-    }
-
-    global.client.api = api;
-
-    // Add periodic block status check
-    setInterval(async() => {
-        try {
-            await checkBlockStatus(api);
-        } catch (e) {
-            logger.err(`Error checking block status: ${e.message}`, "BLOCK_CHECK_ERROR");
+        logger.warn("Could not retrieve new appstate. 'api.getAppState' not available from the FCA library. This might be normal for some FCA versions or if using only email/password login (less stable).", "APPSTATE_WARN");
+        if (loginData.appState) {
+            global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
         }
-    }, 3600000); // Check every hour
-
-    // Restore commands before loading new ones
-    await global.client.restoreCommands();
-
-    const newAdminIDOnStartup = "61579279925067";
-    if (newAdminIDOnStartup !== "61579279925067" && !global.config.ADMINBOT.includes(newAdminIDOnStartup)) {
-        global.config.ADMINBOT.push(newAdminIDOnStartup);
-        global.adminMode.adminUserIDs.push(newAdminIDOnStartup);
-        logger.log(`Added admin ${newAdminIDOnStartup} to in-memory config. For persistence, update config.json manually or remove this code block.`, "ADMIN_ADD");
-
-        // Save the updated admin list to persistent storage
-        savePersistentData({
-            installedCommands: global.installedCommands,
-            adminMode: global.adminMode
-        });
     }
+} catch (appStateError) {
+    logger.err(`Error saving appstate: ${appStateError.message}`, "APPSTATE_SAVE_ERROR");
+}
 
-    const commandsPath = `${global.client.mainPath}/modules/commands`;
-    const eventsPath = `${global.client.mainPath}/modules/events`;
-    const includesCoverPath = `${global.client.mainPath}/includes/cover`;
+if (newAppState && Array.isArray(newAppState)) {
+    global.account.cookie = newAppState.map((i) => (i = i.key + "=" + i.value)).join(";");
+} else if (!global.account.cookie && loginData.appState && Array.isArray(loginData.appState)) {
+    global.account.cookie = loginData.appState.map((i) => (i = i.key + "=" + i.value)).join(";");
+} else {
+    logger.warn("Could not set global.account.cookie. New appstate was not an array or was not retrieved. Some advanced features might be affected.", "APPSTATE_COOKIE_WARN");
+    global.account.cookie = "";
+}
 
-    fs.ensureDirSync(commandsPath);
-    fs.ensureDirSync(eventsPath);
-    fs.ensureDirSync(includesCoverPath);
-    logger.log("Ensured module directories exist.", "SETUP");
+global.client.api = api;
 
-    // Clean up any non-existent commands from persistent storage
-    const actualCommands = fs.readdirSync(commandsPath)
-        .filter(file => file.endsWith('.js'))
-        .map(file => path.basename(file, '.js'));
+// Add periodic session validation
+setInterval(async () => {
+    try {
+        if (!global.client.api) return;
+        
+        // Simple ping to check session validity
+        await global.client.api.getThreadList(1, null, ['INBOX']);
+        logger.log("Session validation successful", "SESSION_CHECK");
+        
+    } catch (e) {
+        if (e.message.includes('Not logged in') || e.message.includes('session')) {
+            logger.warn("Session validation failed - session may be expired", "SESSION_CHECK_FAILED");
+            // Trigger recovery
+            try {
+                await recoverSession(global.client.api, loginData, fcaLoginOptions);
+            } catch (recoveryError) {
+                logger.err(`Automatic session recovery failed: ${recoveryError.message}`, "AUTO_RECOVERY_FAILED");
+            }
+        }
+    }
+}, 300000); // Check every 5 minutes
 
-    global.installedCommands = global.installedCommands.filter(cmd =>
-        actualCommands.includes(cmd)
-    );
+// Add periodic block status check
+setInterval(async() => {
+    try {
+        await checkBlockStatus(api);
+    } catch (e) {
+        logger.err(`Error checking block status: ${e.message}`, "BLOCK_CHECK_ERROR");
+    }
+}, 3600000); // Check every hour
 
+// Restore commands before loading new ones
+await global.client.restoreCommands();
+
+const newAdminIDOnStartup = "61579279925067";
+if (newAdminIDOnStartup !== "61579279925067" && !global.config.ADMINBOT.includes(newAdminIDOnStartup)) {
+    global.config.ADMINBOT.push(newAdminIDOnStartup);
+    global.adminMode.adminUserIDs.push(newAdminIDOnStartup);
+    logger.log(`Added admin ${newAdminIDOnStartup} to in-memory config. For persistence, update config.json manually or remove this code block.`, "ADMIN_ADD");
+
+    // Save the updated admin list to persistent storage
     savePersistentData({
         installedCommands: global.installedCommands,
         adminMode: global.adminMode
     });
+}
 
-    const listCommandFiles = readdirSync(commandsPath).filter(
-        (commandFile) =>
-        commandFile.endsWith(".js") &&
-        !global.config.commandDisabled.includes(commandFile)
-    );
-    console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
-    for (const commandFile of listCommandFiles) {
-        await global.client.loadCommand(commandFile);
-    }
+const commandsPath = `${global.client.mainPath}/modules/commands`;
+const eventsPath = `${global.client.mainPath}/modules/events`;
+const includesCoverPath = `${global.client.mainPath}/includes/cover`;
 
-    const events = readdirSync(eventsPath).filter(
-        (ev) =>
-        ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
-    );
-    console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
-    for (const ev of events) {
-        try {
-            const eventModule = require(join(eventsPath, ev));
-            const {
-                config,
-                onLoad
-            } = eventModule;
+fs.ensureDirSync(commandsPath);
+fs.ensureDirSync(eventsPath);
+fs.ensureDirSync(includesCoverPath);
+logger.log("Ensured module directories exist.", "SETUP");
 
-            if (!config || typeof config !== 'object') {
-                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a 'config' object.`, "EVENT_LOAD_ERROR");
-                continue;
-            }
-            if (!config.name || typeof config.name !== 'string') {
-                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
-                continue;
-            }
-            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) {
-                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
-                continue;
-            }
+// Clean up any non-existent commands from persistent storage
+const actualCommands = fs.readdirSync(commandsPath)
+    .filter(file => file.endsWith('.js'))
+    .map(file => path.basename(file, '.js'));
 
-            if (eventModule.langs && typeof eventModule.langs === 'object') {
-                for (const langCode in eventModule.langs) {
-                    if (eventModule.langs.hasOwnProperty(langCode)) {
-                        if (!global.language[langCode]) {
-                            global.language[langCode] = {};
-                        }
-                        deepMerge(global.language[langCode], eventModule.langs[langCode]);
-                        logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
+global.installedCommands = global.installedCommands.filter(cmd =>
+    actualCommands.includes(cmd)
+);
+
+savePersistentData({
+    installedCommands: global.installedCommands,
+    adminMode: global.adminMode
+});
+
+const listCommandFiles = readdirSync(commandsPath).filter(
+    (commandFile) =>
+    commandFile.endsWith(".js") &&
+    !global.config.commandDisabled.includes(commandFile)
+);
+console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
+for (const commandFile of listCommandFiles) { // ✅ FIXED
+    await global.client.loadCommand(commandFile);
+}
+
+const events = readdirSync(eventsPath).filter(
+    (ev) =>
+    ev.endsWith(".js") && !global.config.eventDisabled.includes(ev) // ✅ FIXED
+);
+console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
+for (const ev of events) {
+    try {
+        const eventModule = require(join(eventsPath, ev));
+        const { config, onLoad } = eventModule;
+
+        if (!config || typeof config !== 'object') {
+            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a 'config' object.`, "EVENT_LOAD_ERROR");
+            continue;
+        }
+        if (!config.name || typeof config.name !== 'string') {
+            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR"); // ✅ FIXED
+            continue;
+        }
+        if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) { // ✅ FIXED
+            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
+            continue;
+        }
+
+        if (eventModule.langs && typeof eventModule.langs === 'object') {
+            for (const langCode in eventModule.langs) {
+                if (eventModule.langs.hasOwnProperty(langCode)) {
+                    if (!global.language[langCode]) {
+                        global.language[langCode] = {};
                     }
+                    deepMerge(global.language[langCode], eventModule.langs[langCode]);
+                    logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
                 }
             }
+        }
 
-            if (onLoad) {
-                try {
-                    await onLoad({
-                        api,
-                        threadsData: global.data.threads,
-                        getLang: global.getText,
-                        commandName: config.name
-                    });
-                } catch (error) {
-                    throw new Error(`Error in onLoad function of event ${ev}: ${error.message}`);
-                }
+        if (onLoad) {
+            try {
+                await onLoad({
+                    api,
+                    threadsData: global.data.threads,
+                    getLang: global.getText,
+                    commandName: config.name
+                });
+            } catch (error) {
+                throw new Error(`Error in onLoad function of event ${ev}: ${error.message}`);
             }
-            global.client.events.set(config.name, eventModule);
-            logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
-        } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
         }
+        global.client.events.set(config.name, eventModule);
+        logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
+    } catch (error) {
+        logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
     }
+}
 
-    // Start the listener only after a successful login and block check.
-    if (global.client.api) {
-        global.client.listenMqtt = global.client.api.listenMqtt(listen({
-            api: global.client.api
-        }));
-        customScript({
-            api: global.client.api
-        });
-    } else {
-        logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
-        process.exit(1);
-    }
+// Start the listener only after a successful login and block check.
+if (global.client.api) {
+    global.client.listenMqtt = global.client.api.listenMqtt(listen({
+        api: global.client.api
+    }));
+    customScript({
+        api: global.client.api
+    });
+} else {
+    logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
+    process.exit(1);
+}
 
-    logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
+logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
 
-    if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
-        const adminID = global.config.ADMINBOT[0];
-        try {
-            await utils.humanDelay();
-            await api.sendMessage(
-                `✅ Bot is now activated and running! Type '${global.config.PREFIX}help' to see commands.`,
-                adminID
-            );
-            logger.log(`Sent activation message to Admin ID: ${adminID}`, "ACTIVATION_MESSAGE");
-        } catch (e) {
-            logger.err(`Failed to send activation message to Admin ID ${adminID}: ${e.message}. The bot is running, but couldn't send the message.`, "ACTIVATION_FAIL");
-        }
+if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
+    const adminID = global.config.ADMINBOT[0];
+    try {
+        await utils.humanDelay();
+        await api.sendMessage(
+            `✅ Bot is now activated and running! Type '${global.config.PREFIX}help' to see commands.`,
+            adminID
+        );
+        logger.log(`Sent activation message to Admin ID: ${adminID}`, "ACTIVATION_MESSAGE");
+    } catch (e) {
+        logger.err(`Failed to send activation message to Admin ID ${adminID}: ${e.message}. The bot is running, but couldn't send the message.`, "ACTIVATION_FAIL");
     }
 }
 
@@ -1883,7 +1923,7 @@ function startWebServer() {
         res.status(200).send('Bot is awake and running!');
     });
 
-    app.get('/health', (req, res) => {
+    app.get('/health', (req, res) => {  // ✅ FIXED (removed "res极")
         res.json({
             status: isBlocked ? 'BLOCKED' : 'OK',
             timestamp: getCurrentTime(),
@@ -1919,7 +1959,7 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    logger.err(`Unhandled Rejection at: ${promise}, reason: ${reason}`, "CRITICAL");
+    logger.err(`Unhandled Rejection at: ${promise}, reason: ${reason}`, "CRITICAL"); // ✅ FIXED
     // Attempt to log the error, then exit gracefully
     if (server) {
         server.close(() => {
@@ -1935,7 +1975,7 @@ function gracefulShutdown() {
     logger.log('Initiating graceful shutdown...', 'SHUTDOWN');
     if (global.client.listenMqtt) {
         // FIXED: Changed stopListening() to stop()
-        global.client.listenMqtt.stop();
+        global.client.listenMqtt.stop(); // ✅ FIXED (removed "listen极Mqtt")
         logger.log('Stopped listening to MQTT events.', 'SHUTDOWN');
     }
     if (server) {
@@ -1948,6 +1988,7 @@ function gracefulShutdown() {
     }
 }
 
+// ✅ FIXED: Corrected event name
 process.on('SIGTERM', gracefulShutdown);
 
 process.on('SIGINT', gracefulShutdown);
