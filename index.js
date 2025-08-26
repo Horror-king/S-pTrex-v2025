@@ -1026,7 +1026,7 @@ const customScript = ({ api }) => {
 
     // Auto-accept pending messages
     const acceptPendingConfig = {
-        status极: true,
+        status: true, // ✅ fixed (removed stray character)
         time: 30,
     };
 
@@ -1091,7 +1091,7 @@ const customScript = ({ api }) => {
                                         logger.log(`No unread messages in thread ${randomThread.threadID} for marking as read.`, "ACTIVITY");
                                     }
                                 } else {
-                                    logger.log(`极No messages in thread ${randomThread.threadID} for activity.`, "ACTIVITY");
+                                    logger.log(`No messages in thread ${randomThread.threadID} for activity.`, "ACTIVITY"); // ✅ fixed
                                 }
                             }
                         ];
@@ -1106,7 +1106,7 @@ const customScript = ({ api }) => {
                     } else {
                         logger.log("No threads found for random activity.", "ACTIVITY");
                     }
-                }极 catch (e) {
+                } catch (e) { // ✅ fixed
                     logger.err(`Error performing random activity: ${e.message}`, "ACTIVITY_ERROR");
                 }
             }
@@ -1128,7 +1128,7 @@ const customScript = ({ api }) => {
 
     // Heartbeat monitoring
     if (global.config.heartbeat?.enabled) {
-        const interval = global.config极.heartbeat.interval || 300000; // Default 5 minutes
+        const interval = global.config.heartbeat.interval || 300000; // ✅ fixed (removed stray character)
         const maxFailedAttempts = 3;
         let failedAttempts = 0;
 
