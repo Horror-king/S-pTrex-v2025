@@ -1081,7 +1081,6 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
-
 // FIXED: User-agent list with valid ASCII characters only
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -1109,7 +1108,7 @@ async function checkBlockStatus(api) {
             return isBlocked;
         }
         
-        lastBlock极 = Date.now();
+        lastBlockCheck = Date.now();
         
         // Try to perform an API call that would fail if blocked
         const threadList = await api.getThreadList(1, null, ['INBOX']);
