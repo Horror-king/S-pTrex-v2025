@@ -1316,106 +1316,106 @@ global.client = {
     nonPrefixCommands: new Set(),
     isBlocked: () => isBlocked, // Expose block status
     loadCommand: async function(commandFileName) {
-        const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
-        const fullPath = path.resolve(commandsPath, commandFileName);
+    const commandsPath = path.join(global.client.mainPath, 'modules', 'commands');
+    const fullPath = path.resolve(commandsPath, commandFileName);
 
-        try {
-            if (require.cache[require.resolve(fullPath)]) {
-                delete require.cache[require.resolve(fullPath)];
-                logger.log(`Cleared cache for极: ${commandFileName}`, "CMD_CACHE");
-            }
-
-            const module = require(fullPath);
-            const {
-                config
-            } = module;
-
-            if (!config || typeof config !== 'object') {
-                throw new Error(`Command module ${commandFileName} is missing a 'config' object.`);
-            }
-            if (!config.name || typeof config.name !== 'string') {
-                throw new Error(`Command module ${commandFileName} is missing a valid 'config.name' property.`);
-            }
-            if (!module.run && !module.onStart) {
-                throw new Error(`Command module ${commandFileName} is missing a '极run' or 'onStart' function.`);
-            }
-
-            config.commandCategory = config.commandCategory || "Uncategorized";
-            config.usePrefix = config.hasOwnProperty('usePrefix') ? config.usePrefix : true;
-
-            if (config.category && !config.commandCategory) {
-                config.commandCategory = config.category;
-                logger.warn(`Command ${config.name} is using deprecated 'config.category'. Please use 'config.commandCategory'.`, "CMD_LOAD_WARN");
-            }
-
-            if (module.langs && typeof module.langs === 'object') {
-                for (const langCode in module.langs) {
-                    if (module.langs.hasOwnProperty(langCode)) {
-                        if (!global.language[lang极Code]) {
-                            global.language[langCode] = {};
-                        }
-                        deepMerge(global.language[langCode], module.langs[langCode]);
-                        logger.log(`Loaded language strings for '${langCode}' from module '${config.name}'.`, "LANG_LOAD");
-                    }
-                }
-            }
-
-            if (global.client.commands.has(config.name)) {
-                logger.warn(`[ COMMAND ] Overwriting existing command: "${config.name}" (from ${commandFileName})`, "COMMAND_LOAD");
-                if (global.client.nonPrefixCommands.has(config.name.toLowerCase())) {
-                    global.client.nonPrefixCommands.delete(config.name.toLowerCase());
-                }
-                global.client.commands.delete(config.name);
-            }
-
-            if (config.usePrefix === false || config.use极Prefix === "both") {
-                global.client.nonPrefixCommands.add(config.name.toLowerCase());
-            }
-
-            // Add to installed commands if not already present
-            const commandName = path.basename(commandFileName, '.js');
-            if (!global.installedCommands.includes(commandName)) {
-                global.installedCommands.push(commandName);
-                savePersistentData({
-                    installedCommands: global.installedCommands,
-                    adminMode: global.adminMode
-                });
-            }
-
-            if (module.onLoad) {
-                try {
-                    if (global.client.api) {
-                        await module.onLoad({
-                            api: global.client.api,
-                            threadsData: global.data.threads,
-                            getLang: global.getText,
-                            commandName: config.name
-                        });
-                    } else {
-                        logger.warn(`API not yet available for onLoad of ${commandFileName}. If this module needs API, it might not work correctly.`, "CMD_LOAD_WARN");
-                        await module.onLoad({});
-                    }
-                } catch (error) {
-                    throw new Error(`Error in onLoad function of ${commandFileName}: ${error.message}`);
-                }
-            }
-
-            if (module.onChat || module.onReaction) {
-                if (!global.client.eventRegistered.includes(config.name)) {
-                    global.client.eventRegistered.push(config.name);
-                }
-            } else if (!module.onChat && !module.onReaction && global.client.eventRegistered.includes(config.name)) {
-                global.client.eventRegistered = global.client.eventRegistered.filter(name => name !== config.name);
-            }
-
-            global.client.commands.set(config.name, module);
-            logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
-            return true;
-        } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
-            return false;
+    try {
+        if (require.cache[require.resolve(fullPath)]) {
+            delete require.cache[require.resolve(fullPath)];
+            logger.log(`Cleared cache for: ${commandFileName}`, "CMD_CACHE");
         }
-    },
+
+        const module = require(fullPath);
+        const { config } = module;
+
+        if (!config || typeof config !== 'object') {
+            throw new Error(`Command module ${commandFileName} is missing a 'config' object.`);
+        }
+        if (!config.name || typeof config.name !== 'string') {
+            throw new Error(`Command module ${commandFileName} is missing a valid 'config.name' property.`);
+        }
+        if (!module.run && !module.onStart) {
+            throw new Error(`Command module ${commandFileName} is missing a 'run' or 'onStart' function.`);
+        }
+
+        config.commandCategory = config.commandCategory || "Uncategorized";
+        config.use极Prefix = config.hasOwnProperty('usePrefix') ? config.usePrefix : true;
+
+        if (config.category && !config.commandCategory) {
+            config.commandCategory = config.category;
+            logger.warn(`Command ${config.name} is using deprecated 'config.category'. Please use 'config.commandCategory'.`, "CMD极_LOAD_WARN");
+        }
+
+        if (module.langs && typeof module.langs === 'object') {
+            for (const langCode in module.langs) {
+                if (module.langs.hasOwnProperty(langCode)) {
+                    // FIXED: Changed lang极Code to langCode
+                    if (!global.language[langCode]) {
+                        global.language[langCode] = {};
+                    }
+                    deepMerge(global.language[langCode], module.langs[langCode]);
+                    logger.log(`Loaded language strings for '${langCode}' from module '${config.name}'.`, "LANG_LOAD");
+                }
+            }
+        }
+
+        if (global.client.commands.has(config.name)) {
+            logger.warn(`[ COMMAND ] Overwriting existing command: "${config.name}" (from ${commandFileName})`, "COMMAND_LOAD");
+            if (global.client.nonPrefixCommands.has(config.name.toLowerCase())) {
+                global.client.nonPrefixCommands.delete(config.name.toLowerCase());
+            }
+            global.client.commands.delete(config.name);
+        }
+
+        if (config.usePrefix === false || config.usePrefix === "both") {
+            global.client.nonPrefixCommands.add(config.name.toLowerCase());
+        }
+
+        // Add to installed commands if not already present
+        const commandName = path.basename(commandFileName, '.js');
+        if (!global.installedCommands.includes(commandName)) {
+            global.installedCommands.push(commandName);
+            savePersistentData({
+                installedCommands: global.installedCommands,
+                adminMode: global.adminMode
+            });
+        }
+
+        if (module.onLoad) {
+            try {
+                if (global.client.api) {
+                    await module.onLoad({
+                        api: global.client.api,
+                        threadsData: global.data.threads,
+                        getLang: global.getText,
+                        commandName: config.name
+                    });
+                } else {
+                    logger.warn(`API not yet available for onLoad of ${commandFileName}. If this module needs API, it might not work correctly.`, "CMD_LOAD_WARN");
+                    await module.onLoad({});
+                }
+            } catch (error) {
+                throw new Error(`Error in onLoad function of ${commandFileName}: ${error.message}`);
+            }
+        }
+
+        if (module.onChat || module.onReaction) {
+            if (!global.client.eventRegistered.includes(config.name)) {
+                global.client.eventRegistered.push(config.name);
+            }
+        } else if (!module.onChat && !module.onReaction && global.client.eventRegistered.includes(config.name)) {
+            global.client.eventRegistered = global.client.eventRegistered.filter(name => name !== config.name);
+        }
+
+        global.client.commands.set(config.name, module);
+        logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
+        return true;
+    } catch (error) {
+        logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
+        return false;
+    }
+},
+  
     restoreCommands: async function() {
         const commandsPath = path.join(this.mainPath, 'modules', 'commands');
 
