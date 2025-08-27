@@ -1794,121 +1794,123 @@ if (newAdminIDOnStartup !== "61579279925067" && !global.config.ADMINBOT.includes
 }
 
 const commandsPath = `${global.client.mainPath}/modules/commands`;
-const eventsPath = `${global.client.mainPath}/modules/events`;
-const includesCoverPath = `${global.client.mainPath}/includes/cover`;
+    const eventsPath = `${global.client.mainPath}/modules/events`;
+    const includesCoverPath = `${global.client.mainPath}/includes/cover`;
 
-fs.ensureDirSync(commandsPath);
-fs.ensureDirSync(eventsPath);
-fs.ensureDirSync(includesCoverPath);
-logger.log("Ensured module directories exist.", "SETUP");
+    fs.ensureDirSync(commandsPath);
+    fs.ensureDirSync(eventsPath);
+    fs.ensureDirSync(includesCoverPath);
+    logger.log("Ensured module directories exist.", "SETUP");
 
-// Clean up any non-existent commands from persistent storage
-const actualCommands = fs.readdirSync(commandsPath)
-    .filter(file => file.endsWith('.js'))
-    .map(file => path.basename(file, '.js'));
+    // Clean up any non-existent commands from persistent storage
+    const actualCommands = fs.readdirSync(commandsPath)
+        .filter(file => file.endsWith('.js'))
+        .map(file => path.basename(file, '.js'));
 
-global.installedCommands = global.installedCommands.filter(cmd =>
-    actualCommands.includes(cmd)
-);
+    global.installedCommands = global.installedCommands.filter(cmd =>
+        actualCommands.includes(cmd)
+    );
 
-savePersistentData({
-    installedCommands: global.installedCommands,
-    adminMode: global.adminMode
-});
+    savePersistentData({
+        installedCommands: global.installedCommands,
+        adminMode: global.adminMode
+    });
 
-const listCommandFiles = readdirSync(commandsPath).filter(
-    (commandFile) =>
-    commandFile.endsWith(".js") &&
-    !global.config.commandDisabled.includes(commandFile)
-);
-console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
-for (const commandFile of listCommandFiles) { // ✅ FIXED
-    await global.client.loadCommand(commandFile);
-}
+    const listCommandFiles = readdirSync(commandsPath).filter(
+        (commandFile) =>
+        commandFile.endsWith(".js") &&
+        !global.config.commandDisabled.includes(commandFile)
+    );
+    console.log(chalk.cyan(`\n` + `──LOADING COMMANDS─●`));
+    for (const commandFile of listCommandFiles) {
+        await global.client.loadCommand(commandFile);
+    }
 
-const events = readdirSync(eventsPath).filter(
-    (ev) =>
-    ev.endsWith(".js") && !global.config.eventDisabled.includes(ev) // ✅ FIXED
-);
-console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
-for (const ev of events) {
-    try {
-        const eventModule = require(join(eventsPath, ev));
-        const { config, onLoad } = eventModule;
+    const events = readdirSync(eventsPath).filter(
+        (ev) =>
+        ev.endsWith(".js") && !global.config.eventDisabled.includes(ev)
+    );
+    console.log(chalk.cyan(`\n` + `──LOADING EVENTS─●`));
+    for (const ev of events) {
+        try {
+            const eventModule = require(join(eventsPath, ev));
+            const {
+                config,
+                onLoad
+            } = eventModule;
 
-        if (!config || typeof config !== 'object') {
-            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a 'config' object.`, "EVENT_LOAD_ERROR");
-            continue;
-        }
-        if (!config.name || typeof config.name !== 'string') {
-            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR"); // ✅ FIXED
-            continue;
-        }
-        if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) { // ✅ FIXED
-            logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
-            continue;
-        }
+            if (!config || typeof config !== 'object') {
+                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a 'config' object.`, "EVENT_LOAD_ERROR");
+                continue;
+            }
+            if (!config.name || typeof config.name !== 'string') {
+                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing a valid 'config.name' property.`, "EVENT_LOAD_ERROR");
+                continue;
+            }
+            if (!config.eventType && !eventModule.run && !eventModule.onChat && !eventModule.onReaction) {
+                logger.err(`${chalk.hex("#ff7100")(`LOADED`)} ${chalk.hex("#FFFF00")(ev)} fail: Missing 'config.eventType' or a valid function (run/onChat/onReaction).`, "EVENT_LOAD_ERROR");
+                continue;
+            }
 
-        if (eventModule.langs && typeof eventModule.langs === 'object') {
-            for (const langCode in eventModule.langs) {
-                if (eventModule.langs.hasOwnProperty(langCode)) {
-                    if (!global.language[langCode]) {
-                        global.language[langCode] = {};
+            if (eventModule.langs && typeof eventModule.langs === 'object') {
+                for (const langCode in eventModule.langs) {
+                    if (eventModule.langs.hasOwnProperty(langCode)) {
+                        if (!global.language[langCode]) {
+                            global.language[langCode] = {};
+                        }
+                        deepMerge(global.language[langCode], eventModule.langs[langCode]);
+                        logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
                     }
-                    deepMerge(global.language[langCode], eventModule.langs[langCode]);
-                    logger.log(`Loaded language strings for '${langCode}' from event module '${config.name}'.`, "LANG_LOAD");
                 }
             }
-        }
 
-        if (onLoad) {
-            try {
-                await onLoad({
-                    api,
-                    threadsData: global.data.threads,
-                    getLang: global.getText,
-                    commandName: config.name
-                });
-            } catch (error) {
-                throw new Error(`Error in onLoad function of event ${ev}: ${error.message}`);
+            if (onLoad) {
+                try {
+                    await onLoad({
+                        api,
+                        threadsData: global.data.threads,
+                        getLang: global.getText,
+                        commandName: config.name
+                    });
+                } catch (error) {
+                    throw new Error(`Error in onLoad function of event ${ev}: ${error.message}`);
+                }
             }
+            global.client.events.set(config.name, eventModule);
+            logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
+        } catch (error) {
+            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
         }
-        global.client.events.set(config.name, eventModule);
-        logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} success`, "EVENT_LOAD");
-    } catch (error) {
-        logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(ev)}: ${error.message}`, "EVENT_LOAD_ERROR");
     }
-}
 
-// Start the listener only after a successful login and block check.
-if (global.client.api) {
-    global.client.listenMqtt = global.client.api.listenMqtt(listen({
-        api: global.client.api
-    }));
-    customScript({
-        api: global.client.api
-    });
-} else {
-    logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
-    process.exit(1);
-}
+    // Start the listener only after a successful login and block check.
+    if (global.client.api) {
+        global.client.listenMqtt = global.client.api.listenMqtt(listen({
+            api: global.client.api
+        }));
+        customScript({
+            api: global.client.api
+        });
+    } else {
+        logger.err("Bot API not available after login attempts. Exiting.", "STARTUP_FAIL");
+        process.exit(1);
+    }
 
-logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
+    logger.log("Bot initialization complete! Waiting for events...", "BOT_READY");
 
-if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
-    const adminID = global.config.ADMINBOT[0];
-    try {
-        await utils.humanDelay();
-        await api.sendMessage(
-            `✅ Bot is now activated and running! Type '${global.config.PREFIX}help' to see commands.`,
-            adminID
-        );
-        logger.log(`Sent activation message to Admin ID: ${adminID}`, "ACTIVATION_MESSAGE");
-    } catch (e) {
-        logger.err(`Failed to send activation message to Admin ID ${adminID}: ${e.message}. The bot is running, but couldn't send the message.`, "ACTIVATION_FAIL");
-    }  
-}
-
+    if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
+        const adminID = global.config.ADMINBOT[0];
+        try {
+            await utils.humanDelay();
+            await api.sendMessage(
+                `✅ Bot is now activated and running! Type '${global.config.PREFIX}help' to see commands.`,
+                adminID
+            );
+            logger.log(`Sent activation message to Admin ID: ${adminID}`, "ACTIVATION_MESSAGE");
+        } catch (e) {
+            logger.err(`Failed to send activation message to Admin ID ${adminID}: ${e.message}. The bot is running, but couldn't send the message.`, "ACTIVATION_FAIL");
+        }
+    }
 }
 
 // --- Web Server for Uptime Monitoring / Health Checks ---
