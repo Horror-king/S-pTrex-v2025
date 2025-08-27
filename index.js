@@ -1906,7 +1906,9 @@ if (global.config.ADMINBOT && global.config.ADMINBOT.length > 0) {
         logger.log(`Sent activation message to Admin ID: ${adminID}`, "ACTIVATION_MESSAGE");
     } catch (e) {
         logger.err(`Failed to send activation message to Admin ID ${adminID}: ${e.message}. The bot is running, but couldn't send the message.`, "ACTIVATION_FAIL");
-    }
+    }  
+}
+
 }
 
 // --- Web Server for Uptime Monitoring / Health Checks ---
