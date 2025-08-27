@@ -446,8 +446,8 @@ async function performLogin(loginData, fcaLoginOptions) {
             isLoggingIn = false;
             
             if (err) {
-                logger.err(`Login attempt ${login极attempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
-                
+                logger.err(`Login attempt ${loginAttempts} failed: ${err.error || err.message}`, "LOGIN_FAILED");
+              
                 // Handle specific Facebook errors
                 if (err.error === 'Not logged in' || err.error === 'Login approval needed') {
                     logger.warn("Session expired or requires approval", "SESSION_ISSUE");
