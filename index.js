@@ -1257,7 +1257,7 @@ async function checkAndUpdateDependencies() {
                 const latestVersion = await check(dependency);
                 const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
-               极 if (semver.neq(normalizedCurrentVersion, latestVersion)) {
+                if (semver.neq(normalizedCurrentVersion, latestVersion)) {
                     logger.warn(
                         `There is a newer version ${chalk.yellow(`(^${latestVersion})`)} available for ${chalk.yellow(dependency)}. ` +
                         `Please manually update it by running 'npm install ${dependency}@latest'`, "MANUAL_UPDATE"
