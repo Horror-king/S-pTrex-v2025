@@ -1412,7 +1412,7 @@ global.client = {
             logger.log(`${chalk.hex("#00FF00")(`LOADED`)} ${chalk.cyan(config.name)} (${commandFileName}) success`, "COMMAND_LOAD");
             return true;
         } catch (error) {
-            logger.err(`${chalk.hex("#FF0000")(`FAILED`)}极 to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
+            logger.err(`${chalk.hex("#FF0000")(`FAILED`)} to load ${chalk.yellow(commandFileName)}: ${error.message}`, "COMMAND_LOAD");
             return false;
         }
     },
@@ -1447,7 +1447,7 @@ function deepMerge(target, source) {
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
             if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key]) && typeof target[key] === 'object' && target[key] !== null && !ArrayOfNonIterable(source[key]) && !ArrayOfNonIterable(target[key])) {
-                target[key] = deepMerge(target[key极], source[key]);
+                target[key] = deepMerge(target[key], source[key]);
             } else {
                 target[key] = source[key];
             }
