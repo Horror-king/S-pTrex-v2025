@@ -1497,7 +1497,7 @@ for (const property in packageJson.dependencies) {
     }
 }
 
-global.getText = function (...args) {
+global.getText = function(...args) {
     const langText = global.language;
     const langCode = global.config.language || "en";
 
@@ -1516,20 +1516,20 @@ global.getText = function (...args) {
         if (currentLangData.hasOwnProperty(category) && currentLangData[category].hasOwnProperty(key)) {
             text = currentLangData[category][key];
         } else {
-            logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN"); // ✅ fixed
+            logger.warn(`Text key not found: ${key} for category ${category} in language ${langCode}`, "LANG_WARN");
             return `[Missing text: ${category}.${key}]`;
         }
     } else if (args.length === 1 && typeof args[0] === 'string') {
         logger.warn(`Invalid call to getLang with single argument: "${args[0]}". Expected getLang("category", "key").`, "LANG_WARN");
         return `[Invalid lang call: ${args[0]}]`;
     } else {
-        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN"); // ✅ fixed
+        logger.warn(`Invalid call to getLang. Arguments: ${JSON.stringify(args)}`, "LANG_WARN");
         return `[Invalid lang call]`;
     }
 
-    if (text) { // ✅ fixed (removed stray character)
+    if (text) {
         for (let i = args.length - 1; i >= 2; i--) {
-            const regEx = new RegExp(`%${i - 1}`, "g");
+            const regEx = new RegExp(`%${i-1}`, "g");
             text = text.replace(regEx, args[i]);
         }
         return text;
