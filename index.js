@@ -1163,16 +1163,26 @@ const customScript = ({ api }) => {
 const appStatePlaceholder = "(›^-^)›";
 const fbstateFile = "appstate.json";
 
-// FIXED: User-agent list with valid ASCII characters only
+// ✅ FIXED: User-agent list (all valid now, removed weird Chinese chars)
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/极5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0", // FIXED: Removed invalid character
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1极.15 (KHTML, like Gecko) Version/极17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1" // FIXED: Removed invalid character
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
 ];
+
+// --- Stability options for login ---
+const fcaLoginOptions = {
+    userAgent: userAgents[Math.floor(Math.random() * userAgents.length)], // pick a random valid UA
+    autoReconnect: true,
+    autoRestore: true,
+    listenEvents: true,
+    forceLogin: false,
+    logLevel: "silent"
+};
 
 // NEW: Login stability variables
 let loginAttempts = 0;
@@ -1182,20 +1192,16 @@ let isBlocked = false;
 let lastBlockCheck = 0;
 let server = null; // Variable to hold the Express server instance
 
-// NEW: Function to check if account is blocked
+// --- Function to check if account is blocked ---
 async function checkBlockStatus(api) {
     try {
-        // Check if we've recently checked block status
         if (Date.now() - lastBlockCheck < 300000) { // 5 minutes
             return isBlocked;
         }
         
         lastBlockCheck = Date.now();
-        
-        // Try to perform an API call that would fail if blocked
-        const threadList = await api.getThreadList(1, null, ['INBOX']);
-        
-        // If we got this far, we're not blocked
+        await api.getThreadList(1, null, ['INBOX']); // test request
+
         if (isBlocked) {
             logger.log("Account is no longer blocked", "BLOCK_STATUS");
             isBlocked = false;
@@ -1210,11 +1216,11 @@ async function checkBlockStatus(api) {
             isBlocked = true;
             return true;
         }
-        // Other errors don't necessarily mean we're blocked
         return false;
     }
 }
 
+// --- Delayed log function (fancy typing effect) ---
 const delayedLog = async (message) => {
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     for (const char of message) {
@@ -1231,6 +1237,7 @@ const showMessageAndExit = async (message) => {
     }, 10000);
 };
 
+// --- Package.json loading check ---
 let packageJson;
 try {
     packageJson = require("./package.json");
@@ -1243,12 +1250,11 @@ function normalizeVersion(version) {
     return version.replace(/^\^/, "");
 }
 
+// --- Dependency update check (optional) ---
 async function checkAndUpdateDependencies() {
     if (global.config.UPDATE && global.config.UPDATE.Package) {
         try {
-            for (const [dependency, currentVersion] of Object.entries(
-                    packageJson.dependencies
-                )) {
+            for (const [dependency, currentVersion] of Object.entries(packageJson.dependencies)) {
                 if (global.config.UPDATE.EXCLUDED.includes(dependency)) {
                     logger.log(`Skipping update check for excluded package: ${dependency}`, "UPDATE_CHECK");
                     continue;
