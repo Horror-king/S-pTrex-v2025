@@ -160,7 +160,7 @@ fs.ensureDirSync(DATA_DIR);
 function loadPersistentData() {
   try {
     if (fs.existsSync(PERSISTENT_FILE)) {
-      const data = JSON.parse(fs.readFileSync(PERSistent_FILE, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(PERSISTENT_FILE, 'utf8'));
       // Validate loaded data structure
       if (!data.installedCommands || !Array.isArray(data.installedCommands)) {
         data.installedCommands = [];
