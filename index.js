@@ -934,13 +934,13 @@ const listen = ({ api }) => {
                     }
 
                     try {
-                        if (command.config.hasPermssion !== undefined && command.config.hasPermssion > 0) {
-                            if (command.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs极(event.senderID)) {
-                                await utils.humanDelay();
-                                api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
-                                return;
-                            }
-                        }
+                       if (command.config.hasPermssion !== undefined && command.config.hasPermssion > 0) {
+    if (command.config.hasPermssion === 1 && event.senderID && !global.adminMode.adminUserIDs.includes(event.senderID)) {
+        await utils.humanDelay();
+        api.sendMessage("You don't have permission to use this command.", event.threadID, event.messageID);
+        return;
+    }
+}
 
                         logger.log(`Executing command: ${command.config.name}`, "COMMAND");
                         await utils.humanDelay();
